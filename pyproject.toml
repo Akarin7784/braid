@@ -36,3 +36,4 @@ check_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 qt_api = "pyside6"
+markers = ["benchmark: 启动时间基准"]

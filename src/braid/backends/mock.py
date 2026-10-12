@@ -5,6 +5,21 @@ from collections.abc import Iterator
 
 from braid.core.backend import AgentBackend, Message, ModelInfo, Session, StreamChunk
 
+DEMO_REPLY = """好的，先看一下现在的实现。**主要问题**有两点：
+
+1. 校验逻辑和界面耦合在一起
+2. 没有超时处理
+
+可以这样拆：
+
+```python
+def login(user: str, pwd: str, timeout: float = 5.0) -> bool:
+    if not user:
+        raise ValueError("empty user")
+    return auth.check(user, pwd, timeout=timeout)
+```
+"""
+
 
 class MockBackend(AgentBackend):
     def __init__(self) -> None:
@@ -14,7 +29,7 @@ class MockBackend(AgentBackend):
             s = self.create_session(t)
             s.messages += [
                 Message("user", f"帮我{t}"),
-                Message("assistant", "好的，这是模拟回复。"),
+                Message("assistant", DEMO_REPLY),
             ]
 
     def list_sessions(self) -> list[Session]:

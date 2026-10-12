@@ -2,7 +2,7 @@
 * { font-size: 13px; color: #1F1F1E; outline: none; }
 QWidget { background: transparent; border: none; selection-background-color: #C9643233; }
 QMainWindow, #ChatArea { background: #FDFDFD; }
-#Sidebar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #F4F4F3, stop:0.8 #F4F4F3, stop:1 #F9F9F8); padding: 18px 16px; }
+#Sidebar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #F4F4F3, stop:0.8 #F4F4F3, stop:1 #F9F9F8); }
 #SidePanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #FBFBFA, stop:0.2 #F6F6F5, stop:1 #F6F6F5); }
 #StatusBar { background: #F4F4F3; color: #6B6B69; font-size: 12px; min-height: 26px; padding: 0 14px; }
 QSplitter::handle { background: transparent; width: 6px; }
@@ -21,7 +21,7 @@ QPushButton[variant="ghost"], QToolButton[variant="ghost"] { background: transpa
 QPushButton[variant="ghost"]:hover, QToolButton[variant="ghost"]:hover { background: #ECECEB; color: #1F1F1E; }
 QPushButton[variant="danger"] { background: transparent; color: #C0392B; }
 QPushButton[variant="danger"]:hover { background: #ECECEB; }
-QToolButton#SendButton { background: #555555; color: #FFFFFF; border-radius: 17px; min-width: 34px; min-height: 34px; padding: 0; }
+#SendButton { background: #555555; color: #FFFFFF; border-radius: 17px; min-width: 34px; min-height: 34px; padding: 0; }
 QToolButton::menu-indicator { image: none; width: 0; }
 QToolButton[role="chip"], QLabel[role="chip"] { background: #F0F0EF; border-radius: 12px; padding: 4px 12px; font-size: 12px; }
 
@@ -81,4 +81,17 @@ QTabBar { qproperty-drawBase: 0; }
 QTabWidget::tab-bar { border: none; }
 #Composer QComboBox, #Composer QToolButton { background: #F0F0EF; border-radius: 10px; padding: 4px 10px; border: none; font-size: 12px; }
 #Composer QComboBox:hover, #Composer QToolButton:hover { background: #ECECEB; }
-#Composer QToolButton#SendButton { background: #555555; color: #FFFFFF; border-radius: 17px; padding: 0; }
+#Composer #SendButton { background: #555555; color: #FFFFFF; border-radius: 17px; padding: 0; }
+
+/* —— v1.2：骨架截图 vs v3 线稿对照修正 —— */
+#SendButton:hover { background: #444444; }
+#SendButton:disabled { background: #E9E9E8; color: #9E9E9B; }
+#EmptyHint, #PanelPlaceholder { color: #9E9E9B; font-size: 13px; }
+#Sidebar QPushButton[variant="secondary"] { padding: 8px 12px; }
+#SessionList::item { padding: 7px 10px; }
+#SessionList::item:selected { font-weight: 600; }
+QTabBar#PanelTabs::tab { padding: 4px 8px; font-size: 13px; }
+#ChatArea QPushButton[variant="ghost"] { color: #9E9E9B; border-radius: 8px; }
+#ChatArea QPushButton[variant="ghost"]:hover { color: #1F1F1E; }
+#Composer QComboBox::down-arrow { image: none; width: 0; }
+#Composer QComboBox { padding-right: 10px; }

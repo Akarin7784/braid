@@ -1,4 +1,5 @@
 """冒烟测试：包能导入、模拟后端可用、主窗口能创建并显示。"""
+
 import importlib
 
 import pytest
@@ -24,7 +25,8 @@ def test_mock_backend_implements_interface():
     from braid.core.backend import AgentBackend
 
     impls = [
-        v for v in vars(mock).values()
+        v
+        for v in vars(mock).values()
         if isinstance(v, type) and issubclass(v, AgentBackend) and v is not AgentBackend
     ]
     assert impls, "mock.py 里没有找到 AgentBackend 的实现"
@@ -36,8 +38,7 @@ def test_main_window_shows(qtbot):
     from braid.ui import main_window
 
     win_cls = next(
-        v for k, v in vars(main_window).items()
-        if isinstance(v, type) and k.endswith("Window")
+        v for k, v in vars(main_window).items() if isinstance(v, type) and k.endswith("Window")
     )
     try:
         win = win_cls()
@@ -46,7 +47,8 @@ def test_main_window_shows(qtbot):
         from braid.core.backend import AgentBackend
 
         backend = next(
-            v for v in vars(mock).values()
+            v
+            for v in vars(mock).values()
             if isinstance(v, type) and issubclass(v, AgentBackend) and v is not AgentBackend
         )()
         win = win_cls(backend)

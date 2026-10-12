@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import AgentBackend
+from braid.ui.chat_controller import ChatController
+from braid.ui.chat_view import ChatView
 
 
 class DragArea(QWidget):
@@ -58,12 +60,22 @@ class MainWindow(QMainWindow):
         self.session_list.setObjectName("SessionList")
         self.session_list.setModel(QStringListModel([s.title for s in backend.list_sessions()]))
         sl.addWidget(self.session_list)
+        self._sessions = backend.list_sessions()
+        self.session_list.clicked.connect(lambda i: self._open(i.row()))
 
         chat = QFrame()
         chat.setObjectName("ChatArea")
         cl = QVBoxLayout(chat)
         cl.setContentsMargins(24, 12, 24, 16)
         top = QHBoxLayout()
+        self.sidebar_toggle = _btn("\u2630", "ghost")
+        self.sidebar_toggle.setObjectName("SidebarToggle")
+        self.sidebar_toggle.setFixedSize(32, 28)
+        self.sidebar_toggle.clicked.connect(lambda: sidebar.setVisible(not sidebar.isVisible()))
+        top.addWidget(self.sidebar_toggle)
+        self.title = QLabel("")
+        self.title.setObjectName("SessionTitle")
+        top.addWidget(self.title)
         top.addWidget(DragArea(minimumHeight=24), 1)
         for t, slot in (
             ("\u2212", self.showMinimized),
@@ -75,8 +87,8 @@ class MainWindow(QMainWindow):
             b.clicked.connect(slot)
             top.addWidget(b)
         cl.addLayout(top)
-        self.messages = QLabel("选择左侧会话开始", alignment=Qt.AlignmentFlag.AlignCenter)
-        cl.addWidget(self.messages, 1)
+        self.chat_view = ChatView()
+        cl.addWidget(self.chat_view, 1)
         composer = QFrame()
         composer.setObjectName("Composer")
         col = QVBoxLayout(composer)
@@ -95,6 +107,10 @@ class MainWindow(QMainWindow):
         self.send_btn.setFixedSize(34, 34)
         self.send_btn.setToolTip("发送")
         bar.addWidget(self.send_btn)
+        self.chat = ChatController(backend, self.chat_view, backend.list_models()[0].id)
+        self.send_btn.clicked.connect(self._send_or_stop)
+        self.chat.busyChanged.connect(lambda b: self.send_btn.setText("\u25a0" if b else "\u2191"))
+        self.chat.editRequested.connect(self.input.setPlainText)
         col.addLayout(bar)
         cl.addWidget(composer)
 
@@ -112,15 +128,30 @@ class MainWindow(QMainWindow):
         split = QSplitter(Qt.Orientation.Horizontal, handleWidth=4, childrenCollapsible=False)
         for w in (sidebar, chat, panel):
             split.addWidget(w)
-        split.setSizes([240, 760, 280])
+        split.setSizes([240, 620, 420])
         split.setStretchFactor(1, 1)
         self.setCentralWidget(split)
         try:
             from braid.theme.shadows import apply_shadow
 
-            apply_shadow(composer, "e2")
+            apply_shadow(composer, "e3")
         except Exception:
             pass
+
+        if self._sessions:
+            self._open(0)
+
+    def _open(self, row: int) -> None:
+        s = self._sessions[row]
+        self.title.setText(s.title)
+        self.chat.open_session(s.id)
+
+    def _send_or_stop(self) -> None:
+        if self.chat.busy:
+            self.chat.stop()
+            return
+        self.chat.send(self.input.toPlainText())
+        self.input.clear()
 
     def _toggle_max(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()

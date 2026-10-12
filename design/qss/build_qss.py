@@ -1,5 +1,9 @@
 """从 tokens.json 生成 app_light.qss / app_dark.qss。用法: python build_qss.py"""
-import json, pathlib, string
+
+import json
+import pathlib
+import string
+
 here = pathlib.Path(__file__).parent
 tokens = json.loads((here.parent / "tokens.json").read_text())
 tpl = string.Template((here / "app.qss.tpl").read_text())

@@ -1,0 +1,89 @@
+<html><head><meta charset=utf-8><style>
+*{box-sizing:border-box}body{margin:0;width:1400px;font-family:"Noto Sans CJK SC",sans-serif;font-size:14px;color:#1F1F1E;background:#EEEEEC;padding:28px}
+h2{font-size:16px;margin:26px 0 12px}h2:first-child{margin-top:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.pane{border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:14px}
+.L{background:#FDFDFD}.D{background:#1B1B1A;color:#ECECEA}
+.c{font-size:12px;color:#9E9E9B}.D .c{color:#73736F}
+.ann{font-size:11px;color:#C96442;font-family:monospace}
+.tb{border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:13px}
+.L .tb{background:#F3F3F2}.D .tb{background:#262625}
+.mono{font-family:monospace;font-size:13px}.sp{flex:1}
+.body{border-radius:0 0 12px 12px;padding:4px 16px 14px;margin-top:-14px}.L .body{background:#F3F3F2}.D .body{background:#262625}
+.code{border-radius:10px;padding:10px 12px;font-family:monospace;font-size:12px;line-height:19px}.L .code{background:#FFFFFF}.D .code{background:#1F1F1E}
+.dot{width:8px;height:8px;border-radius:50%}
+.card{border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;width:400px}.L .card{background:#fff;box-shadow:0 4px 18px #0000000f}.D .card{background:#2A2A29;box-shadow:0 4px 18px #00000066}
+.ic{width:36px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}.L .ic{background:#EEEEED;color:#6B6B69}.D .ic{background:#343433;color:#A3A3A0}
+.btn{border-radius:10px;padding:6px 12px;font-size:13px}.L .btn{background:#F0F0EF}.D .btn{background:#30302F}
+.pri{font-weight:600}.L .pri{background:#555;color:#fff}.D .pri{background:#E6E6E3;color:#1B1B1A}.gh{background:transparent!important;opacity:.7}
+.bar{height:4px;border-radius:2px;overflow:hidden}.L .bar{background:#ECECEB}.D .bar{background:#343433}.bar i{display:block;height:100%;width:62%;background:#C96442}
+.perm{border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}.L .perm{background:#fff;box-shadow:0 4px 18px #0000000f}.D .perm{background:#2A2A29;box-shadow:0 4px 18px #00000066}
+.risk{font-size:12px;border-radius:12px;padding:2px 10px}
+.k{font-size:11px;opacity:.55;margin-left:6px}
+</style></head><body>
+<h2>1. 工具调用块 QFrame[role="toolBlock"]：r12 · 内边距 12×16 · 底色 subtle · 无边框</h2>
+<div class=grid>
+<div class="pane L">
+<div class=c>收起（默认）</div>
+<div class=tb><span>🔧</span><span>读取文件</span><span class=mono style="opacity:.7">src/login.py</span><span class=sp></span><span class=c>0.2s</span><span>▸</span></div>
+<div class=c>运行中：左侧状态点 brand 色，1s 呼吸；计时实时更新</div>
+<div class=tb><span class=dot style="background:#C96442"></span><span>执行命令</span><span class=mono style="opacity:.7">pytest -q</span><span class=sp></span><span class=c>3.4s</span><span class=c>停止</span></div>
+<div class=c>展开：参数和结果分两段，结果超过 12 行折叠，显示"展开全部"</div>
+<div class=tb style="border-radius:12px 12px 0 0"><span>🔧</span><span>编辑文件</span><span class=mono style="opacity:.7">src/login.py</span><span class=sp></span><span style="color:#2E8B57;font-size:12px">+12 −3</span><span>▾</span></div>
+<div class=body><div class=c style="margin:6px 0">参数</div><div class=code>old_str: "def login():"<br>new_str: "def login(user: str):"</div><div class=c style="margin:10px 0 6px">结果</div><div class=code>已写入 42 行 <span style="color:#C96442">在 Diff 面板查看 ›</span></div></div>
+<div class=c>失败：图标换成 ⚠，标题用 danger 色，默认展开并显示错误摘要</div>
+<div class=tb><span style="color:#C0392B">⚠</span><span style="color:#C0392B">执行命令失败</span><span class=mono style="opacity:.7">npm test</span><span class=sp></span><span class=c>退出码 1</span><span>▸</span></div>
+<div class=ann>收起高度 44px · 图标 16px · 标题 13px/600 · 参数 mono 13px text2 · 展开动画 150ms</div>
+</div><div class="pane D">
+<div class=c>收起（默认）</div>
+<div class=tb><span>🔧</span><span>读取文件</span><span class=mono style="opacity:.7">src/login.py</span><span class=sp></span><span class=c>0.2s</span><span>▸</span></div>
+<div class=c>运行中：左侧状态点 brand 色，1s 呼吸；计时实时更新</div>
+<div class=tb><span class=dot style="background:#C96442"></span><span>执行命令</span><span class=mono style="opacity:.7">pytest -q</span><span class=sp></span><span class=c>3.4s</span><span class=c>停止</span></div>
+<div class=c>展开：参数和结果分两段，结果超过 12 行折叠，显示"展开全部"</div>
+<div class=tb style="border-radius:12px 12px 0 0"><span>🔧</span><span>编辑文件</span><span class=mono style="opacity:.7">src/login.py</span><span class=sp></span><span style="color:#2E8B57;font-size:12px">+12 −3</span><span>▾</span></div>
+<div class=body><div class=c style="margin:6px 0">参数</div><div class=code>old_str: "def login():"<br>new_str: "def login(user: str):"</div><div class=c style="margin:10px 0 6px">结果</div><div class=code>已写入 42 行 <span style="color:#C96442">在 Diff 面板查看 ›</span></div></div>
+<div class=c>失败：图标换成 ⚠，标题用 danger 色，默认展开并显示错误摘要</div>
+<div class=tb><span style="color:#C0392B">⚠</span><span style="color:#C0392B">执行命令失败</span><span class=mono style="opacity:.7">npm test</span><span class=sp></span><span class=c>退出码 1</span><span>▸</span></div>
+<div class=ann>收起高度 44px · 图标 16px · 标题 13px/600 · 参数 mono 13px text2 · 展开动画 150ms</div>
+</div></div>
+<h2>2. 文件卡片 QFrame[role="card"]：r14 · 阴影 e2 · 宽 400 · 图标 36×42 r8</h2><div class=grid>
+<div class="pane L">
+<div class=c>常态</div>
+<div class=card><div class=ic>PY</div><div><b>login.py</b><div class=c>Python · 2.1 KB</div></div><span class=sp></span><span class=btn>预览</span><span class=btn>下载</span></div>
+<div class=c>hover：阴影升到 e3，按钮底色变成 hover 色；整张卡可点击打开预览</div>
+<div class=card style="box-shadow:0 4px 24px #0000001a"><div class=ic>MD</div><div><b>report.md</b><div class=c>Markdown · 8 KB</div></div><span class=sp></span><span class=btn>预览</span><span class="btn pri">下载</span></div>
+<div class=c>生成中：副标题换成进度条，按钮先隐藏</div>
+<div class=card><div class=ic>ZIP</div><div style="flex:1"><b>build.zip</b><div class=bar style="margin-top:8px"><i></i></div></div><span class=c>62%</span></div>
+<div class=c>图片：用缩略图代替类型图标</div>
+<div class=card><div class=ic style="background:linear-gradient(135deg,#C9644233,#55555522)"></div><div><b>design.png</b><div class=c>PNG · 1280×800 · 210 KB</div></div><span class=sp></span><span class=btn>预览</span><span class=btn>下载</span></div>
+<div class=ann>类型标签 11px/600 · 文件名 14px/600 · 元信息 caption · 按钮 secondary r10</div></div><div class="pane D">
+<div class=c>常态</div>
+<div class=card><div class=ic>PY</div><div><b>login.py</b><div class=c>Python · 2.1 KB</div></div><span class=sp></span><span class=btn>预览</span><span class=btn>下载</span></div>
+<div class=c>hover：阴影升到 e3，按钮底色变成 hover 色；整张卡可点击打开预览</div>
+<div class=card style="box-shadow:0 4px 24px #0000001a"><div class=ic>MD</div><div><b>report.md</b><div class=c>Markdown · 8 KB</div></div><span class=sp></span><span class=btn>预览</span><span class="btn pri">下载</span></div>
+<div class=c>生成中：副标题换成进度条，按钮先隐藏</div>
+<div class=card><div class=ic>ZIP</div><div style="flex:1"><b>build.zip</b><div class=bar style="margin-top:8px"><i></i></div></div><span class=c>62%</span></div>
+<div class=c>图片：用缩略图代替类型图标</div>
+<div class=card><div class=ic style="background:linear-gradient(135deg,#C9644233,#55555522)"></div><div><b>design.png</b><div class=c>PNG · 1280×800 · 210 KB</div></div><span class=sp></span><span class=btn>预览</span><span class=btn>下载</span></div>
+<div class=ann>类型标签 11px/600 · 文件名 14px/600 · 元信息 caption · 按钮 secondary r10</div></div></div>
+<h2>3. 授权卡片（内联在消息流里，和模态弹窗共用内容）：r14 · 阴影 e2 · Enter = 仅本次允许</h2><div class=grid>
+<div class="pane L">
+<div class=perm>
+<div style="display:flex;align-items:center;gap:10px"><span>🔐</span><b>需要你的授权</b><span class=sp></span><span class=risk style="color:#B26A00;background:#B26A001f">中风险 · 写入</span></div>
+<div class=tb style="padding:10px 14px"><b class=mono>filesystem</b><span class=c>›</span><b class=mono>write_file</b><span class=sp></span><span class=c>MCP</span></div>
+<div class=code>path: ~/proj/src/login.py · 42 行 <span style="color:#C96442">展开 ›</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="btn gh">拒绝<span class=k>Esc</span></span><span class=sp></span><span class=btn>始终允许<span class=k>⌘⇧⏎</span></span><span class="btn pri">仅本次允许<span class=k>⏎</span></span></div>
+<div class=c>"始终允许"会保存到本设备，可在 设置 › 扩展与 MCP › 权限 中撤销</div></div>
+<div class=c>处理后：卡片收成一行，保留在消息流里</div>
+<div class=tb><span style="color:#2E8B57">✓</span><span>已允许（仅本次）</span><span class=mono style="opacity:.7">filesystem › write_file</span></div>
+<div class=tb><span style="color:#C0392B">✕</span><span>已拒绝</span><span class=mono style="opacity:.7">shell › run_command</span></div>
+<div class=ann>风险色：低 success / 中 warning / 高 danger · 高风险时不显示"始终允许"</div></div><div class="pane D">
+<div class=perm>
+<div style="display:flex;align-items:center;gap:10px"><span>🔐</span><b>需要你的授权</b><span class=sp></span><span class=risk style="color:#B26A00;background:#B26A001f">中风险 · 写入</span></div>
+<div class=tb style="padding:10px 14px"><b class=mono>filesystem</b><span class=c>›</span><b class=mono>write_file</b><span class=sp></span><span class=c>MCP</span></div>
+<div class=code>path: ~/proj/src/login.py · 42 行 <span style="color:#C96442">展开 ›</span></div>
+<div style="display:flex;align-items:center;gap:8px"><span class="btn gh">拒绝<span class=k>Esc</span></span><span class=sp></span><span class=btn>始终允许<span class=k>⌘⇧⏎</span></span><span class="btn pri">仅本次允许<span class=k>⏎</span></span></div>
+<div class=c>"始终允许"会保存到本设备，可在 设置 › 扩展与 MCP › 权限 中撤销</div></div>
+<div class=c>处理后：卡片收成一行，保留在消息流里</div>
+<div class=tb><span style="color:#2E8B57">✓</span><span>已允许（仅本次）</span><span class=mono style="opacity:.7">filesystem › write_file</span></div>
+<div class=tb><span style="color:#C0392B">✕</span><span>已拒绝</span><span class=mono style="opacity:.7">shell › run_command</span></div>
+<div class=ann>风险色：低 success / 中 warning / 高 danger · 高风险时不显示"始终允许"</div></div></div></body></html>

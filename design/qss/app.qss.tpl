@@ -2,7 +2,7 @@
 * { font-size: 13px; color: ${text}; outline: none; }
 QWidget { background: transparent; border: none; selection-background-color: ${sel}; }
 QMainWindow, #ChatArea { background: ${bg_app}; }
-#Sidebar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 ${sb_a}, stop:0.8 ${sb_a}, stop:1 ${sb_b}); padding: 18px 16px; }
+#Sidebar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 ${sb_a}, stop:0.8 ${sb_a}, stop:1 ${sb_b}); }
 #SidePanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 ${pn_a}, stop:0.2 ${pn_b}, stop:1 ${pn_b}); }
 #StatusBar { background: ${sb_a}; color: ${text2}; font-size: 12px; min-height: 26px; padding: 0 14px; }
 QSplitter::handle { background: transparent; width: 6px; }
@@ -21,7 +21,7 @@ QPushButton[variant="ghost"], QToolButton[variant="ghost"] { background: transpa
 QPushButton[variant="ghost"]:hover, QToolButton[variant="ghost"]:hover { background: ${hover}; color: ${text}; }
 QPushButton[variant="danger"] { background: transparent; color: ${danger}; }
 QPushButton[variant="danger"]:hover { background: ${hover}; }
-QToolButton#SendButton { background: ${accent}; color: ${accent_text}; border-radius: 17px; min-width: 34px; min-height: 34px; padding: 0; }
+#SendButton { background: ${accent}; color: ${accent_text}; border-radius: 17px; min-width: 34px; min-height: 34px; padding: 0; }
 QToolButton::menu-indicator { image: none; width: 0; }
 QToolButton[role="chip"], QLabel[role="chip"] { background: ${control}; border-radius: 12px; padding: 4px 12px; font-size: 12px; }
 
@@ -81,4 +81,17 @@ QTabBar { qproperty-drawBase: 0; }
 QTabWidget::tab-bar { border: none; }
 #Composer QComboBox, #Composer QToolButton { background: ${control}; border-radius: 10px; padding: 4px 10px; border: none; font-size: 12px; }
 #Composer QComboBox:hover, #Composer QToolButton:hover { background: ${hover}; }
-#Composer QToolButton#SendButton { background: ${accent}; color: ${accent_text}; border-radius: 17px; padding: 0; }
+#Composer #SendButton { background: ${accent}; color: ${accent_text}; border-radius: 17px; padding: 0; }
+
+/* —— v1.2：骨架截图 vs v3 线稿对照修正 —— */
+#SendButton:hover { background: ${accent_hover}; }
+#SendButton:disabled { background: ${active}; color: ${text3}; }
+#EmptyHint, #PanelPlaceholder { color: ${text3}; font-size: 13px; }
+#Sidebar QPushButton[variant="secondary"] { padding: 8px 12px; }
+#SessionList::item { padding: 7px 10px; }
+#SessionList::item:selected { font-weight: 600; }
+QTabBar#PanelTabs::tab { padding: 4px 8px; font-size: 13px; }
+#ChatArea QPushButton[variant="ghost"] { color: ${text3}; border-radius: 8px; }
+#ChatArea QPushButton[variant="ghost"]:hover { color: ${text}; }
+#Composer QComboBox::down-arrow { image: none; width: 0; }
+#Composer QComboBox { padding-right: 10px; }

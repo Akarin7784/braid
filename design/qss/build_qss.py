@@ -7,7 +7,8 @@ import string
 here = pathlib.Path(__file__).parent
 tokens = json.loads((here.parent.parent / "src/braid/theme/tokens.json").read_text())
 tpl = string.Template((here / "app.qss.tpl").read_text())
-for name, t in tokens.items():
+for name in ("light", "dark"):
+    t = tokens[name]
     (here.parent.parent / "src/braid/theme" / f"app_{name}.qss").write_text(
         tpl.substitute(t, name=name)
     )

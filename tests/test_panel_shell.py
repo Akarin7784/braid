@@ -172,3 +172,48 @@ def test_trailing_widget(qtbot):
     QApplication.processEvents()
     assert p.trailing.isHidden() and box.parent() is None
     assert row.layout().itemAt(len(p.tabs)).geometry().width() == stretch_before
+
+
+def test_trailing_reserve_width(qtbot):
+    from braid.ui.window_controls import WindowControls
+
+    w = _main_window(qtbot)
+    p = w.panel
+    want = WindowControls.reserved_width() + 16
+    assert p.trailing_reserve() == want
+    row = p.tab_row
+    stretch = row.layout().itemAt(len(p.tabs))
+    # 留空 = 标签行右侧到面板右边缘：留空条 + 面板 18px 内边距
+    space_from_right = p.width() - row.mapTo(p, stretch.geometry().topRight()).x() - 1
+    assert space_from_right == want
+
+
+def _gap(w):
+    c = w.controls
+    last = w.panel.tabs[-1]
+    last_right = last.mapTo(w, last.rect().topRight()).x()
+    return c.geometry().left() - last_right
+
+
+def test_controls_never_cover_last_tab(qtbot):
+    w = _main_window(qtbot)
+    assert _gap(w) >= 16
+    w.panel.set_panel_width(MIN_WIDTH)
+    QApplication.processEvents()
+    w._place_controls()
+    assert w.panel.width() == MIN_WIDTH and _gap(w) >= 16
+    w.set_panel_open(False, animate=False)
+    w.set_panel_open(True, animate=False)
+    QApplication.processEvents()
+    assert _gap(w) >= 16
+
+
+def test_main_window_panel_dark_from_app_property_only(qtbot):
+    app = QApplication.instance()
+    app.setProperty("braidDark", True)
+    try:
+        w = _main_window(qtbot)
+        assert tokens("dark")["pn_a"] in w.panel.styleSheet()
+        assert tokens("light")["pn_a"] not in w.panel.styleSheet()
+    finally:
+        app.setProperty("braidDark", False)

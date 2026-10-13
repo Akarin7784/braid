@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
+    QSpacerItem,
     QSplitter,
     QSplitterHandle,
     QStackedWidget,
@@ -196,6 +198,10 @@ class RightPanel(QFrame):
         self.trailing.hide()
         rl.addWidget(self.trailing, 0, Qt.AlignmentFlag.AlignVCenter)
         self._trailing_w: QWidget | None = None
+        # 右侧留空（给主窗口的浮层窗口控制按钮）；从面板右边缘算起，已含 18px 内边距
+        self._reserve = 0
+        self._reserve_item = QSpacerItem(0, 0, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        rl.addItem(self._reserve_item)
         root.addWidget(row)
 
         self.stack = QStackedWidget()
@@ -228,6 +234,20 @@ class RightPanel(QFrame):
         eff = QGraphicsDropShadowEffect(self, blurRadius=24, xOffset=-8, yOffset=0)
         eff.setColor(QColor(0, 0, 0, 0x14))
         self.setGraphicsEffect(eff)
+
+    def set_trailing_reserve(self, px: int) -> None:
+        """标签行右侧为浮层按钮留出 ``px``（自面板右边缘起，含面板 18px 右内边距）。"""
+        self._reserve = max(0, int(px))
+        lay = self.layout()
+        pad = lay.contentsMargins().right() if lay is not None else 0
+        self._reserve_item.changeSize(
+            max(0, self._reserve - pad), 0, QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum
+        )
+        if row_lay := self.tab_row.layout():
+            row_lay.invalidate()
+
+    def trailing_reserve(self) -> int:
+        return self._reserve
 
     def trailing_widget(self) -> QWidget | None:
         return self._trailing_w

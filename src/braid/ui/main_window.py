@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
             browser_controller=MockBrowserController(),
         )
         self.panel_tabs = panel.tab_row
+        # 最后一个标签与浮层按钮至少 16px
+        panel.set_trailing_reserve(WindowControls.reserved_width() + 16)
 
         split = PanelSplitter(Qt.Orientation.Horizontal, handleWidth=4, childrenCollapsible=False)
         for w in (sidebar, chat, panel):

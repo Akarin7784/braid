@@ -305,3 +305,59 @@ def test_diff_soft_wrap(qtbot):
     assert [r[2] for r in dv.rows if r[0] == 0][1:] == [True] * (srcs.count(0) - 1)
     assert "".join(r[1] for r in dv.rows if r[0] == 0) == "+ " + "x" * 200
     assert CONT_MARK == "↪"
+
+
+def test_stage_dot_state_and_click_does_not_expand(qtbot):
+    src, p = _page(qtbot)
+    t = tokens("light")
+    staged = p.entry("src/pages/forgot.py", True).row
+    unstaged = p.entry("src/pages/login.py", False).row
+    ring, tick = staged.dot_colors()
+    assert _hex(ring) == t["brand"] and tick is not None
+    ring, tick = unstaged.dot_colors()
+    assert _hex(ring) == t["text3"] and tick is None
+    unstaged.resize(400, ROW_H)
+    assert unstaged.dot_rect().width() == 14
+    qtbot.mouseClick(unstaged, Qt.MouseButton.LeftButton, pos=unstaged.dot_rect().center())
+    assert "src/pages/login.py" in [f.path for f in src.status().staged]
+    ent = p.entry("src/pages/login.py", True)
+    assert ent is not None and not ent.expanded
+    qtbot.mouseClick(ent.row, Qt.MouseButton.LeftButton, pos=ent.row.dot_rect().center())
+    assert p.entry("src/pages/login.py", False) is not None
+    assert p.stage_btn.text() == "全部暂存"
+
+
+def test_big_tag_only_on_big_files(qtbot):
+    from braid.ui.panel.git import BIG_TAG
+
+    _, p = _page(qtbot)
+    assert BIG_TAG == "较大"
+    assert [r.fc.path for r in p.rows if r.big] == [BIG_FILE]
+
+
+def test_hunk_separator_uses_border_subtle(qtbot):
+    dv = DiffView()
+    qtbot.addWidget(dv)
+    dv.resize(400, 60)
+    dv.set_lines([DiffLine("hunk", None, None, "@@ -1,1 +1,1 @@")])
+    img = QImage(dv.size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    dv.render(img)
+    r = dv.line_rect(0)
+    y = r.y() + r.height() // 2
+    assert _hex(img.pixelColor(dv.width() - 10, y)) == tokens("light")["border_subtle"]
+    assert tokens("dark")["border_subtle"] == "#333332"
+
+
+def test_diff_font_cjk_fallback_regular(qtbot):
+    from PySide6.QtGui import QFont, QFontDatabase
+
+    from braid.ui.panel.git import diff_families, mono_font
+
+    fams = diff_families()
+    cjk = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
+    f = mono_font()
+    assert f.families() == fams and f.weight() == QFont.Weight.Normal
+    if cjk:
+        assert fams[-1] in cjk  # 中文落到标题字体链里的 CJK 族
+        assert not any(x in cjk for x in fams[:-1])  # 等宽西文部分不含 CJK 族

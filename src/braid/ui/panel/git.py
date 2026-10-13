@@ -42,6 +42,8 @@ DIFF_FONT_PX, DIFF_LINE_H, LINENO_W = 12, 20, 32
 DIFF_INDENT, DIFF_PAD = 4, 2  # diff 左缩进 4px，不套卡片
 BIG_DIFF_LINES = 400  # 超过即默认折叠，点击加载
 BIG_HINT = "改动较大，点击加载"
+BIG_TAG = "较大"
+DOT_PX = 14  # 行内暂存圆圈
 COMMIT_MAX_LINES = 6
 COMMIT_PAD_V = 10  # 提交输入框上下内边距
 NAME_TOKEN = {"A": "success", "D": "danger"}  # 文件名色；修改沿用 text
@@ -66,9 +68,32 @@ def diff_bg(kind: str, dark: bool) -> QColor | None:
     return None
 
 
+_DIFF_FAMILIES: list[str] | None = None
+
+
+def diff_families() -> list[str]:
+    """diff 字体族链：等宽西文族在前（不含 CJK 族，免得中文落到粗的等宽 CJK 字体），
+    之后接标题字体链所用的中文族（resolved_cjk_family，Regular）。进程内算一次。"""
+    global _DIFF_FAMILIES
+    if _DIFF_FAMILIES is None:
+        from PySide6.QtGui import QFontDatabase
+        from PySide6.QtWidgets import QApplication
+
+        from braid.ui.settings.widgets import CJK_FALLBACK, mono_families, resolved_cjk_family
+
+        cjk_db = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
+        latin = [f for f in mono_families() if f not in cjk_db and f not in CJK_FALLBACK]
+        cjk = resolved_cjk_family(QApplication.font())
+        tail = [cjk] if cjk else [f for f in CJK_FALLBACK if f in cjk_db]
+        _DIFF_FAMILIES = latin + [f for f in tail if f not in latin]
+    return list(_DIFF_FAMILIES)
+
+
 def mono_font(px: int = DIFF_FONT_PX) -> QFont:
-    f = QFont("monospace")
+    f = QFont()
+    f.setFamilies(diff_families())
     f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setWeight(QFont.Weight.Normal)
     f.setPixelSize(px)
     return f
 
@@ -225,6 +250,7 @@ class FileRow(QWidget):
     加删除线）· 右侧 +a −d。悬停出 hover 浅底。"""
 
     clicked = Signal(object, bool)  # FileChange, staged
+    toggleStage = Signal(object, bool)  # 点圆圈：单独暂存/取消暂存
 
     PAD = 8
     CHEVRON_W = 12
@@ -246,6 +272,21 @@ class FileRow(QWidget):
     def stats_text(self) -> tuple[str, str]:
         return (f"+{self.fc.additions}", f"−{self.fc.deletions}")
 
+    @property
+    def big(self) -> bool:
+        return self.fc.changed_lines > BIG_DIFF_LINES
+
+    def dot_rect(self) -> QRect:
+        x = self.PAD + self.CHEVRON_W + 6
+        return QRect(x, (ROW_H - DOT_PX) // 2, DOT_PX, DOT_PX)
+
+    def dot_colors(self) -> tuple[QColor, QColor | None]:
+        """(圆圈/填充色, 勾色)：已暂存 brand 实心 + 白勾；未暂存 text3 空心。"""
+        dark = is_dark()
+        if self.staged:
+            return qcolor("brand", dark), QColor("#FFFFFF")
+        return qcolor("text3", dark), None
+
     def name_color(self) -> QColor:
         return qcolor(NAME_TOKEN.get(self.fc.status, "text"), is_dark())
 
@@ -260,7 +301,12 @@ class FileRow(QWidget):
         return super().event(e)
 
     def mouseReleaseEvent(self, e: QMouseEvent) -> None:
-        if e.button() == Qt.MouseButton.LeftButton and self.rect().contains(e.position().toPoint()):
+        pos = e.position().toPoint()
+        if e.button() != Qt.MouseButton.LeftButton or not self.rect().contains(pos):
+            return
+        if self.dot_rect().adjusted(-4, -6, 4, 6).contains(pos):
+            self.toggleStage.emit(self.fc, self.staged)  # 点圆圈不展开
+        else:
             self.clicked.emit(self.fc, self.staged)
 
     def paintEvent(self, e: QPaintEvent) -> None:
@@ -289,6 +335,30 @@ class FileRow(QWidget):
                 QPointF(cx - 1.75, cy + 3.5),
             ]
         p.drawPolyline(pts)
+        # 暂存圆圈
+        ring, tick = self.dot_colors()
+        dr = QRectF(self.dot_rect()).adjusted(0.75, 0.75, -0.75, -0.75)
+        if tick is None:
+            p.setPen(QPen(ring, 1.5))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(dr)
+        else:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(ring)
+            p.drawEllipse(QRectF(self.dot_rect()))
+            tp = QPen(tick, 1.5)
+            tp.setCapStyle(Qt.PenCapStyle.RoundCap)
+            tp.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            p.setPen(tp)
+            c = dr.center()
+            p.drawPolyline(
+                [
+                    QPointF(c.x() - 3, c.y()),
+                    QPointF(c.x() - 0.8, c.y() + 2.3),
+                    QPointF(c.x() + 3.2, c.y() - 2.2),
+                ]
+            )
+            p.setBrush(Qt.BrushStyle.NoBrush)
         fm = QFontMetrics(self.font())
         mid = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         p.setFont(self.font())
@@ -300,7 +370,12 @@ class FileRow(QWidget):
         x_add = x_end - del_w - 6 - add_w
         p.setPen(qcolor("success", dark))
         p.drawText(QRect(x_add, 0, add_w, ROW_H), mid, add_t)
-        x0 = self.PAD + self.CHEVRON_W + 8
+        if self.big:
+            tag_w = fm.horizontalAdvance(BIG_TAG)
+            x_add -= tag_w + 8
+            p.setPen(qcolor("text3", dark))
+            p.drawText(QRect(x_add, 0, tag_w, ROW_H), mid, BIG_TAG)
+        x0 = self.dot_rect().right() + 1 + 8
         avail = max(0, x_add - 12 - x0)
         d, name = self.dir_and_name()
         name_w = fm.horizontalAdvance(name)
@@ -414,7 +489,7 @@ class DiffView(QWidget):
             if ln.kind == "hunk" and not cont:
                 # 细分隔线在范围文字两侧，文字处断开
                 tw = QFontMetrics(self.font()).horizontalAdvance(seg)
-                y, line = r.y() + r.height() // 2, qcolor("active", dark)
+                y, line = r.y() + r.height() // 2, qcolor("border_subtle", dark)
                 p.fillRect(QRect(DIFF_INDENT, y, self.TEXT_X - 8 - DIFF_INDENT, 1), line)
                 x1 = self.TEXT_X + tw + 8
                 p.fillRect(QRect(x1, y, r.width() - x1, 1), line)
@@ -657,6 +732,7 @@ class GitPage(QWidget):
         for fc, staged in files:
             ent = FileEntry(self, fc, staged)
             ent.row.clicked.connect(self.toggle_file)
+            ent.row.toggleStage.connect(self.toggle_stage)
             self.files_layout.addWidget(ent)
             self.entries.append(ent)
             keys.add(ent.key)
@@ -679,6 +755,14 @@ class GitPage(QWidget):
         on = not ent.expanded
         (self.expanded.add if on else self.expanded.discard)(ent.key)
         ent.set_expanded(on)
+
+    def toggle_stage(self, fc: FileChange, staged: bool) -> None:
+        """单独暂存/取消暂存一个文件；展开状态跟着文件走。"""
+        for s in (self.expanded, self.loaded):
+            if (fc.path, staged) in s:
+                s.discard((fc.path, staged))
+                s.add((fc.path, not staged))
+        (self.source.unstage if staged else self.source.stage)(fc.path)
 
     def toggle_stage_all(self) -> None:
         """有未暂存的就全部暂存，否则全部取消暂存；展开状态跟着文件走。"""

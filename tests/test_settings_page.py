@@ -34,7 +34,7 @@ def test_key_saved_masked_and_hint(qtbot, tmp_path):
     assert card.key.hint.text() == SAVED_TEXT
     card.key.toggle_reveal()
     assert card.key.edit.text() == "sk-secret9876"
-    assert "sk-secret" not in (tmp_path / "p.json").read_text()
+    assert "sk-secret" not in (tmp_path / "p.json").read_text(encoding="utf-8")
 
 
 def test_fail_backend_shows_warning(qtbot, tmp_path):

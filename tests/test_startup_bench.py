@@ -37,7 +37,12 @@ def test_cold_start_under_limit():
     for _ in range(3):
         t0 = time.perf_counter()
         out = subprocess.run(
-            [sys.executable, "-c", SCRIPT], env=env, capture_output=True, text=True, check=True
+            [sys.executable, "-c", SCRIPT],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         )
         runs.append((float(out.stdout.strip().splitlines()[-1]), time.perf_counter() - t0))
     best_inproc = min(r[0] for r in runs)

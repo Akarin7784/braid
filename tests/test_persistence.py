@@ -12,7 +12,7 @@ def test_provider_roundtrip_without_key(tmp_path):
     assert secrets.set_key(p.id, "sk-123") is True
     reloaded = ProviderStore(tmp_path / "p.json")
     assert reloaded.get(p.id) == p
-    assert "sk-123" not in (tmp_path / "p.json").read_text()
+    assert "sk-123" not in (tmp_path / "p.json").read_text(encoding="utf-8")
     assert secrets.get_key(p.id) == "sk-123"
 
 
@@ -32,7 +32,9 @@ def test_fail_backend_keeps_key_in_memory_only(tmp_path):
     assert secrets.keyring_available() is False
     assert secrets.set_key("p1", "secret") is False
     assert secrets.get_key("p1") == "secret"
-    assert not any("secret" in f.read_text() for f in tmp_path.rglob("*") if f.is_file())
+    assert not any(
+        "secret" in f.read_text(encoding="utf-8") for f in tmp_path.rglob("*") if f.is_file()
+    )
 
 
 def test_sessions_pin_order_and_delete(tmp_path):
@@ -51,7 +53,9 @@ def test_project_id_grouping_and_legacy_file(tmp_path):
     import json
 
     path = tmp_path / "s.json"
-    path.write_text(json.dumps({"sessions": [{"id": "old", "title": "旧", "updated_at": 5}]}))
+    path.write_text(
+        json.dumps({"sessions": [{"id": "old", "title": "旧", "updated_at": 5}]}), encoding="utf-8"
+    )
     s = SessionStore(path)
     s.upsert("a", "A", updated_at=1, project_id="p1")
     s.upsert("b", "B", updated_at=2, project_id="p1")

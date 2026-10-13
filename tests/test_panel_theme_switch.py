@@ -62,3 +62,25 @@ def test_prewarm_only_on_windows(qtbot):
     qtbot.addWidget(w)
     if sys.platform != "win32":
         assert prewarm_gl_surface(w) is None
+
+
+def test_sync_icons_and_commit_scrollbar_follow_theme(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    p = _panel(qtbot)
+    git = p.ensure_page(GIT_TAB)
+    light = git.pull_btn.icon().pixmap(12, 12).toImage()
+    app.setProperty("braidDark", True)
+    try:
+        p.set_theme("dark")
+        dark = git.pull_btn.icon().pixmap(12, 12).toImage()
+        assert light != dark
+    finally:
+        app.setProperty("braidDark", False)
+        p.set_theme("light")
+    c = git.commit_input
+    assert c.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    c.setPlainText("\n".join("x" * 8))
+    assert c.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded

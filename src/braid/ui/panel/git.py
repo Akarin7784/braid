@@ -196,7 +196,7 @@ class SyncButton(QPushButton):
         dark = is_dark()
         if not self.isEnabled():
             return qcolor("text3", dark)
-        return qcolor("brand" if self.property("emphasis") else "text", dark)
+        return qcolor("brand" if self.property("emphasis") else "text2", dark)
 
     def refresh_icon(self) -> None:
         if self.busy:
@@ -387,7 +387,8 @@ class CommitInput(QPlainTextEdit):
         super().__init__()
         self.setObjectName("CommitInput")
         self.setPlaceholderText("提交信息（Ctrl+Enter 提交）")
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # 未超过最大行数时不显示滚动条（否则 Windows 上会在按钮左边留一根竖条）
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         doc = self.document()
         if doc is not None:
@@ -400,7 +401,13 @@ class CommitInput(QPlainTextEdit):
 
     def _fit(self) -> None:
         doc = self.document()
-        n = max(1, min(COMMIT_MAX_LINES, doc.lineCount() if doc else 1))
+        lines = doc.lineCount() if doc else 1
+        n = max(1, min(COMMIT_MAX_LINES, lines))
+        self.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            if lines > COMMIT_MAX_LINES
+            else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         # 按实际字体行高算（Windows 雅黑行距比 Noto 大），不写死像素；
         # contentsMargins 已含 QSS padding 与边框
         m = self.contentsMargins()
@@ -425,6 +432,8 @@ class GitPage(QWidget):
         """切换深浅色：QSS 重设；文件行与 diff 在 paint 时按 is_dark() 取色。"""
         self.theme = mode
         self.setStyleSheet(git_qss(mode))
+        self.pull_btn.refresh_icon()
+        self.push_btn.refresh_icon()
         for w in self.findChildren(QWidget):
             w.update()
 

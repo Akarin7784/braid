@@ -18,7 +18,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QShowEvent
+from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -60,6 +60,12 @@ from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
 SIDE_W, CONTENT_MAX, CONTENT_PAD = 180, 640, 24
 CARD_RADIUS, CARD_PAD, CARD_GAP, FIELD_H = 12, 16, 12, 32
 CARD_INNER_GAP = 6
+# 大窗口/全屏时设置内容（分区导航 + 页面）限宽居中，顶部留白随高度增长
+SETTINGS_MAX_W = 960
+TOP_RATIO, TOP_MIN, TOP_MAX = 0.06, 24, 96
+# 1280x800 时设置视口高约 734：round(734*0.06)=44，比现有 24 多 20。减去这段基线，
+# 保证 1280x800 下与原来一致（24），更高的窗口才逐步加大留白。
+TOP_BASELINE = 20
 WARM_DELAY_MS = 120  # 打开设置后多久预热等宽字体
 TEST_DELAY_MS = 400
 SAVED_TEXT = "已保存到系统钥匙串"
@@ -584,6 +590,29 @@ class SettingsPage(QWidget):
         lay.setSpacing(0)
         lay.addWidget(self.nav)
         lay.addWidget(self.stack, 1)
+        self._frame = lay
+        self._apply_frame()
+
+    @staticmethod
+    def top_margin(h: int) -> int:
+        """页面内容顶部留白：clamp(round(h*0.06) - 基线, 24, 96)，h 为设置视口高度。"""
+        return max(TOP_MIN, min(TOP_MAX, round(h * TOP_RATIO) - TOP_BASELINE))
+
+    def _apply_frame(self) -> None:
+        """左右留白让内容块（导航 + 页面）最宽 SETTINGS_MAX_W 并水平居中；顶部按高度留白。
+
+        页面自身已有 CONTENT_PAD 的顶部内边距，这里只补差值，导航同步下移保持对齐。
+        """
+        side = max(0, (self.width() - SETTINGS_MAX_W) // 2)
+        extra_top = self.top_margin(self.height()) - CONTENT_PAD
+        m = self._frame.contentsMargins()
+        if (m.left(), m.top(), m.right()) != (side, extra_top, side):
+            self._frame.setContentsMargins(side, extra_top, side, 0)
+            self._frame.activate()  # 当场重排，不等下一轮 LayoutRequest（首帧就到位，不跳动）
+
+    def resizeEvent(self, e: QResizeEvent) -> None:  # noqa: N802
+        self._apply_frame()
+        super().resizeEvent(e)
 
     def showEvent(self, e: QShowEvent) -> None:  # noqa: N802
         super().showEvent(e)

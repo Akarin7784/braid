@@ -399,3 +399,35 @@ def test_keyring_check_exception_resolves_unavailable(qtbot, tmp_path, monkeypat
     m._check_thread.join(timeout=5)
     assert escaped == []
     assert m.run_keyring_check() is False  # 同步路径同样不抛
+
+
+def test_settings_content_centered_max_width(qtbot, tmp_path, monkeypatch):
+    """全屏/最大化时设置内容（导航 + 页面）最宽 960 并水平居中，顶部留白随高度增长。"""
+    from PySide6.QtCore import QPoint
+
+    from braid.ui.main_window import MainWindow
+    from braid.ui.settings_page import SETTINGS_MAX_W
+
+    monkeypatch.setenv("BRAID_CONFIG_DIR", str(tmp_path))
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(1920, 1080)
+    w.show()
+    qtbot.waitExposed(w)
+    w.show_settings(True)
+    qtbot.wait(50)
+    sp = w.settings_page
+    left = sp.nav.mapTo(sp, QPoint(0, 0)).x()
+    right = sp.stack.mapTo(sp, QPoint(sp.stack.width(), 0)).x()
+    assert right - left <= SETTINGS_MAX_W
+    assert abs(left - (sp.width() - right)) <= 1  # 左右留白相等
+    assert left > 0
+    title = sp.models.header.title
+    assert title.mapTo(sp, QPoint(0, 0)).y() == SettingsPage.top_margin(sp.height())
+
+
+@pytest.mark.parametrize(
+    ("h", "top"), [(400, 24), (734, 24), (800, 28), (1014, 41), (1400, 64), (2000, 96), (3000, 96)]
+)
+def test_settings_top_margin_formula(h, top):
+    assert SettingsPage.top_margin(h) == top

@@ -125,6 +125,8 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingsTitle { font-size: 18px; color: #ECECEA; }
 #settingsSubtitle { font-size: 13px; color: #A3A3A0; }
 #settingsEmpty { font-size: 13px; color: #73736F; }
+#mcpTarget { font-size: 12px; color: #73736F; font-family: "JetBrains Mono", "Menlo", "Consolas", monospace; }
+#mcpTarget[error="true"] { color: #E2685B; }
 #providerName { font-size: 14px; font-weight: 600; }
 #settingLabel { color: #ECECEA; font-weight: normal; }
 #settingCardTitle { color: #A3A3A0; font-size: 12px; }

@@ -39,6 +39,7 @@ from braid.core.providers import Provider, ProviderStore
 from braid.theme.menu import RoundedMenu, is_dark
 from braid.theme.nine_slice import NineSliceShadow
 from braid.theme.palette import qcolor
+from braid.ui.settings import mcp as _mcp  # noqa: F401  注册“MCP 服务”页
 from braid.ui.settings.pages import NAV, PAGE_FACTORIES, PlaceholderPage
 from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
     BAR_W,

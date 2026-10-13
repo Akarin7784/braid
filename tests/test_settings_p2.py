@@ -389,3 +389,27 @@ def test_overflow_scrolls_inside_list_only(qtbot, tmp_path, monkeypatch):
     bottom = ap.add_card.mapTo(vp, QPoint(0, ap.add_card.height())).y()
     assert bottom <= vp.height()
     assert qcolor("text3")  # 颜色仍走 token
+
+
+def test_mono_font_not_generic_only(qtbot, monkeypatch):
+    """macOS / Windows CI：平台 FixedFont 只是通用名 "monospace" 时也要落到真实等宽字体。"""
+    from PySide6.QtGui import QFont, QFontDatabase, QFontInfo
+
+    from braid.ui.settings import widgets
+
+    monkeypatch.setattr(
+        widgets.QFontDatabase, "systemFont", staticmethod(lambda _kind: QFont("monospace"))
+    )
+    fams = widgets.mono_families()
+    for name in ("Menlo", "Consolas", "DejaVu Sans Mono"):
+        assert name in fams
+    # 平台等宽字体排在比例 CJK 回退之前
+    assert fams.index("Menlo") < fams.index("PingFang SC")
+    assert fams.index("Consolas") < fams.index("Microsoft YaHei UI")
+    f = widgets.mono_font(px=12)
+    assert f.families() == fams and f.pixelSize() == 12
+    assert f.styleHint() == QFont.StyleHint.Monospace
+    installed = set(QFontDatabase.families())
+    first = next(x for x in fams if x in installed)
+    assert QFontDatabase.isFixedPitch(first), first
+    assert QFontInfo(f).fixedPitch()

@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+from importlib.resources import files
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -550,9 +552,43 @@ class AddCard(QAbstractButton):
         p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
+# 各平台自带的等宽字体，放在 tokens 的 CJK 回退之前：没装 JetBrains Mono 时，
+# 不能让 Qt 先选中 PingFang / 微软雅黑这类比例字体（macOS / Windows 上
+# 平台主题给的 FixedFont 可能只是通用名 "monospace"，fontconfig 以外解析不了）。
+PLATFORM_MONO = (
+    "SF Mono",
+    "Menlo",
+    "Monaco",
+    "Cascadia Mono",
+    "Consolas",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Noto Sans Mono",
+    "Courier New",
+)
+
+
+def mono_families() -> list[str]:
+    """等宽字体族的回退顺序：tokens.font.mono 的等宽项 → 系统 FixedFont → 平台等宽 → CJK 回退。"""
+    raw = (files("braid.theme") / "tokens.json").read_text(encoding="utf-8")
+    token_list: list[str] = list(json.loads(raw).get("font", {}).get("mono", []))
+    db = set(QFontDatabase.families())
+    head = [f for f in token_list if f in db and QFontDatabase.isFixedPitch(f)]
+    sys_fixed = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont).family()
+    rest = [f for f in token_list if f not in head]
+    out: list[str] = []
+    for f in [*head, sys_fixed, *PLATFORM_MONO, *rest]:
+        if f and f not in out:
+            out.append(f)
+    return out
+
+
 def mono_font(base: QFont | None = None, px: int = 12) -> QFont:
-    """系统等宽字体（路径、提示词用）。"""
-    f = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+    """等宽字体（路径、提示词用），按 :func:`mono_families` 的顺序回退。"""
+    f = QFont()
+    f.setFamilies(mono_families())
+    f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setFixedPitch(True)
     if base is not None:
         f.setWeight(base.weight())
     f.setPixelSize(px)

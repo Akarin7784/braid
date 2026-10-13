@@ -147,9 +147,14 @@ def test_collapsed_fade_painted(qtbot):
     assert fade.height() == chat_view.FADE_H == 48 and fade.contains(tog.center())
     assert r.bottom() - tog.bottom() == chat_view.TOGGLE_BOTTOM
     img = v.grab().toImage()
-    bg = img.pixelColor(r.x() + 4, r.top() + 4)  # 代码块底色
+    dpr = img.devicePixelRatio()  # grab() 是设备像素，逻辑坐标要换算
+
+    def at(x: int, y: int):
+        return img.pixelColor(int(x * dpr), int(y * dpr))
+
+    bg = at(r.x() + 4, r.top() + 4)  # 代码块底色
     # 渐隐区中间应已基本是底色，而上方代码行区域不受影响
-    mid = img.pixelColor(r.x() + 200, fade.top() + fade.height() * 3 // 4)
+    mid = at(r.x() + 200, fade.top() + fade.height() * 3 // 4)
     assert abs(mid.lightness() - bg.lightness()) <= 6
 
 

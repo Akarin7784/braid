@@ -10,6 +10,13 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check . && ruff format --check .
       - run: mypy
+      - name: 检查 pre-commit 钩子（存在且可执行）
+        run: |
+          for f in scripts/hooks/pre-commit scripts/install-hooks.sh; do
+            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
+            [ "$mode" = "100755" ] || { echo "$f 不存在或没有执行权限（git 里的 mode 是 '${mode:-无}'）"; exit 1; }
+          done
+          bash -n scripts/hooks/pre-commit
   test-and-package:
     needs: lint
     strategy:

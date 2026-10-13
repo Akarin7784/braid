@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from braid.core.artifacts import ArtifactSource
 from braid.ui.panel.tokens import tokens
 
 DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH = 420, 320, 720
@@ -96,7 +97,12 @@ class RightPanel(QFrame):
     currentChanged = Signal(int)
     widthChanged = Signal(int)
 
-    def __init__(self, parent: QWidget | None = None, mode: str = "light") -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        mode: str = "light",
+        artifact_source: ArtifactSource | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("RightPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -134,7 +140,10 @@ class RightPanel(QFrame):
         self.stack.addWidget(QWidget())
         self.browser_loaded = False
         self.stack.addWidget(placeholder_page("Git（即将推出）"))
-        self.stack.addWidget(placeholder_page("产物"))
+        from braid.ui.panel.artifacts import ArtifactsPage
+
+        self.artifacts = ArtifactsPage(artifact_source, theme=mode)
+        self.stack.addWidget(self.artifacts)
         self.tab_group.idClicked.connect(self.set_current)
 
         self.grip = ResizeGrip(self)

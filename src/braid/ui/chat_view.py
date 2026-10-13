@@ -59,6 +59,8 @@ class ChatItem:
     variants: list[str] = field(default_factory=lambda: [""])
     current: int = 0
     streaming: bool = False
+    # "plain"：流式阶段按纯文本排版（字号/行高同正文）；"markdown"：完整渲染。
+    render_mode: str = "markdown"
 
     @property
     def text(self) -> str:
@@ -93,7 +95,8 @@ class ChatModel(QAbstractListModel):
     def append(self, role: str, text: str = "", streaming: bool = False) -> int:
         row = len(self.items)
         self.beginInsertRows(QModelIndex(), row, row)
-        self.items.append(ChatItem(role, [text], streaming=streaming))
+        mode = "plain" if streaming else "markdown"
+        self.items.append(ChatItem(role, [text], streaming=streaming, render_mode=mode))
         self.endInsertRows()
         return row
 
@@ -104,13 +107,23 @@ class ChatModel(QAbstractListModel):
 
     def finish(self, row: int) -> None:
         self.items[row].streaming = False
+        # mock：目前结束即切换；流式优化接手后可改为由调用方显式 finalize(row)。
+        self.finalize(row)
         self._changed(row)
+
+    def finalize(self, row: int) -> None:
+        """生成结束后调用：把该行从纯文本排版切换为 Markdown 渲染（只触发一次重排）。"""
+        it = self.items[row]
+        if it.render_mode != "markdown":
+            it.render_mode = "markdown"
+            self._changed(row)
 
     def new_variant(self, row: int, text: str = "", streaming: bool = True) -> None:
         it = self.items[row]
         it.variants.append(text)
         it.current = len(it.variants) - 1
         it.streaming = streaming
+        it.render_mode = "plain" if streaming else "markdown"
         self._changed(row)
 
     def switch_variant(self, row: int, delta: int) -> None:
@@ -200,10 +213,10 @@ def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
 class _DocCache:
     def __init__(self, cap: int = 512) -> None:
         self.cap = cap
-        self._d: OrderedDict[tuple[str, int, bool], QTextDocument] = OrderedDict()
+        self._d: OrderedDict[tuple[str, int, bool, str], QTextDocument] = OrderedDict()
 
-    def get(self, text: str, width: int, dark: bool) -> QTextDocument:
-        key = (text, width, dark)
+    def get(self, text: str, width: int, dark: bool, mode: str = "markdown") -> QTextDocument:
+        key = (text, width, dark, mode)
         doc = self._d.get(key)
         if doc is None:
             doc = QTextDocument()
@@ -211,8 +224,11 @@ class _DocCache:
             doc.setDefaultStyleSheet(
                 "pre, code { font-family: 'JetBrains Mono','Menlo','Consolas',monospace; }"
             )
-            doc.setMarkdown(text)
-            highlight_code_blocks(doc, dark)
+            if mode == "plain":
+                doc.setPlainText(text)
+            else:
+                doc.setMarkdown(text)
+                highlight_code_blocks(doc, dark)
             doc.setTextWidth(width)
             self._d[key] = doc
             if len(self._d) > self.cap:
@@ -247,7 +263,7 @@ class ChatDelegate(QStyledItemDelegate):
         item: ChatItem = index.data(ChatModel.ItemRole)
         col = self._column(option.rect)
         tw = max(80, self._text_width(item, col.width()))
-        doc = self.cache.get(item.text or " ", tw, self.dark)
+        doc = self.cache.get(item.text or " ", tw, self.dark, item.render_mode)
         h = int(doc.size().height()) + 2 * PAD + ACTION_H
         return QSize(option.rect.width(), h)
 
@@ -292,7 +308,10 @@ class ChatDelegate(QStyledItemDelegate):
         rect: QRect = option.rect
         col = self._column(rect.adjusted(0, PAD // 2, 0, 0))
         doc = self.cache.get(
-            item.text or " ", max(80, self._text_width(item, col.width())), self.dark
+            item.text or " ",
+            max(80, self._text_width(item, col.width())),
+            self.dark,
+            item.render_mode,
         )
         bubble = self._bubble_rect(item, col, doc)
         painter.save()
@@ -321,7 +340,10 @@ class ChatDelegate(QStyledItemDelegate):
     def hit(self, option_rect: QRect, item: ChatItem, pos) -> str | None:  # noqa: ANN001
         col = self._column(option_rect.adjusted(0, PAD // 2, 0, 0))
         doc = self.cache.get(
-            item.text or " ", max(80, self._text_width(item, col.width())), self.dark
+            item.text or " ",
+            max(80, self._text_width(item, col.width())),
+            self.dark,
+            item.render_mode,
         )
         for key, _l, r in self._actions(item, option_rect, self._bubble_rect(item, col, doc)):
             if key != "_" and r.contains(pos):

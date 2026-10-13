@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 [tool.setuptools.package-data]
 "braid.theme" = ["*.qss", "tokens.json"]
-"braid.assets" = ["*.png", "*.svg", "icons/*.png", "shadows/*.png"]
+"braid.assets" = ["*.png", "*.svg", "icons/*.png", "shadows/*.png", "fonts/*.ttf", "fonts/OFL.txt"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.6", "mypy>=1.11", "pyinstaller>=6.10"]

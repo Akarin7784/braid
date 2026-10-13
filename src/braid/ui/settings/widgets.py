@@ -50,7 +50,6 @@ COMBO_ARROW, COMBO_ARROW_RIGHT, POPUP_RADIUS = 12, 10, 10
 BAR_W, BAR_IDLE_MS, BAR_ALPHA = 6, 800, 0.4
 
 CJK_FALLBACK = ("PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC")
-_HEAVY_STYLES = ("semibold", "demibold", "medium", "bold")
 
 
 def resolved_cjk_family(font: QFont) -> str | None:
@@ -62,14 +61,34 @@ def resolved_cjk_family(font: QFont) -> str | None:
     return None
 
 
+def _style_weight(style: str) -> int | None:
+    """字面样式名 → 字重；只识别标题可能用到的 Medium/SemiBold/Bold。"""
+    st = style.lower().replace(" ", "").replace("-", "")
+    if "semibold" in st or "demibold" in st:
+        return 600
+    if "medium" in st:
+        return 500
+    if st == "bold" or (st.endswith("bold") and not st.startswith(("extra", "ultra"))):
+        return 700
+    return None
+
+
 def title_weight(font: QFont) -> QFont.Weight:
-    """中文字体有真实的 Semibold/Medium/Bold 字面才用 600，否则 Normal，避免合成粗体。"""
+    """标题请求的字重，必须对应中文字体真实存在的字面，禁止合成粗体。
+
+    顺序：SemiBold(600) > Medium(500) > 仅有 Bold 时 700 > 都没有用 Normal(400)。
+    """
     fam = resolved_cjk_family(font)
     if fam is None:
         return QFont.Weight.Normal
-    styles = [s.lower().replace(" ", "") for s in QFontDatabase.styles(fam)]
-    if any(h in st for st in styles for h in _HEAVY_STYLES):
-        return QFont.Weight.DemiBold
+    have = {_style_weight(s) for s in QFontDatabase.styles(fam)}
+    for w, enum in (
+        (600, QFont.Weight.DemiBold),
+        (500, QFont.Weight.Medium),
+        (700, QFont.Weight.Bold),
+    ):
+        if w in have:
+            return enum
     return QFont.Weight.Normal
 
 

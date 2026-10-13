@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
+import pytest
 from PySide6.QtGui import QFont, QFontDatabase, QTextLayout
 
 from braid.theme.fonts import apply_app_font, bundled_font_files, register_bundled_fonts
@@ -43,32 +44,42 @@ def test_inter_registered_and_used_for_latin(qapp):
         qapp.setFont(old)
 
 
-def test_title_weight_rule(monkeypatch):
-    f = QFont()
-    for styles, want in (
+@pytest.mark.parametrize(
+    ("styles", "want"),
+    [
         (["Regular"], QFont.Weight.Normal),
         (["Regular", "Light"], QFont.Weight.Normal),
-        (["Regular", "Medium"], QFont.Weight.DemiBold),
-        (["Regular", "Semibold"], QFont.Weight.DemiBold),
-        (["Regular", "Bold"], QFont.Weight.DemiBold),
-    ):
-        monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: "X")
-        monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f, s=styles: s))
-        assert spw.title_weight(f) == want, styles
+        (["Regular", "Medium"], QFont.Weight.Medium),
+        (["Regular", "SemiBold"], QFont.Weight.DemiBold),
+        (["Regular", "Demibold"], QFont.Weight.DemiBold),
+        (["Regular", "Medium", "SemiBold", "Bold"], QFont.Weight.DemiBold),
+        (["Regular", "Medium", "Bold"], QFont.Weight.Medium),
+        (["Regular", "Bold"], QFont.Weight.Bold),
+        (["Regular", "ExtraBold"], QFont.Weight.Normal),
+    ],
+)
+def test_title_weight_rule(monkeypatch, styles, want):
+    monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: "X")
+    monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: styles))
+    assert spw.title_weight(QFont()) == want
+
+
+def test_title_weight_no_cjk(monkeypatch):
     monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: None)
-    assert spw.title_weight(f) == QFont.Weight.Normal
+    assert spw.title_weight(QFont()) == QFont.Weight.Normal
 
 
 def test_title_600_never_synthesized(qapp):
-    """真实字体库下：title_weight 给 600 时，中文字形必须落到真的粗字面。"""
+    """真实字体库下：中文字形必须落到 title_weight 选中的那个真实字面。"""
     register_bundled_fonts()
     f = QFont(qapp.font())
     f.setFamilies(["Inter", *spw.CJK_FALLBACK])
     f.setPixelSize(18)
     w = spw.title_weight(f)
     f.setWeight(w)
-    if w != QFont.Weight.DemiBold:
-        return
     for _fam, style in _faces(f, "模型与服务"):
-        s = style.lower().replace(" ", "")
-        assert any(h in s for h in ("medium", "semibold", "demibold", "bold")), style
+        got = spw._style_weight(style)
+        if w == QFont.Weight.Normal:
+            assert got is None, style
+        else:
+            assert got == int(w.value), (style, w)

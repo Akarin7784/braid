@@ -22,7 +22,7 @@ from braid.backends.mock import MockBackend
 from braid.theme import load_qss
 from braid.theme.fonts import apply_app_font, register_bundled_fonts
 from braid.ui.main_window import MainWindow
-from braid.ui.settings.widgets import resolved_cjk_family, title_weight
+from braid.ui.settings.widgets import _style_weight, resolved_cjk_family, title_weight
 
 LATIN = "Braid settings: Model & Services 0123"
 CJK_BODY = "模型与服务的接口地址和密钥"
@@ -32,14 +32,9 @@ EXPECTED_CJK = {
     "win32": ("Microsoft YaHei UI", "Microsoft YaHei"),
     "linux": ("Noto Sans CJK SC",),
 }
-# rawFont().weight() 回显的是请求字重（合成粗体时也是 600），不能用来判断；
+# rawFont().weight() 回显的是请求字重（合成粗体时也一样），不能用来判断；
 # 字面样式名（styleName）才反映实际用的是哪个字面文件。
-HEAVY_STYLES = ("medium", "semibold", "demibold", "bold", "heavy", "black")
-
-
-def is_heavy(style: str) -> bool:
-    s = style.lower().replace(" ", "")
-    return any(h in s for h in HEAVY_STYLES)
+IDEAL = {600: "SemiBold（理想）", 500: "Medium（可接受）", 700: "Bold（仅有 Bold，非理想但允许）"}
 
 
 def settle(ms: int = 200) -> None:
@@ -111,13 +106,17 @@ def main() -> int:
     if int(title_font.weight()) != int(want):
         errors.append(f"标题字重 {int(title_font.weight())} 与 title_weight() {int(want)} 不一致")
     tit = report("title", title_font, TITLE)
-    for fam, wt, style, _n in tit:
+    for fam, _wt, style, _n in tit:
         lines.append(f"    styles({fam}): {QFontDatabase.styles(fam)}")
         if exp and fam not in exp:
             errors.append(f"标题中文落到 {fam}，预期 {exp}")
-        real = [st for st in QFontDatabase.styles(fam) if is_heavy(st)]
-        if int(title_font.weight()) >= 600 and (not is_heavy(style) or not real):
-            errors.append(f"标题要 600，但 {fam} 实际字面是 {style!r}（{wt}），会合成粗体")
+        req = int(title_font.weight())
+        got = _style_weight(style)
+        if req > 400 and got != req:
+            errors.append(f"标题请求 {req}，但 {fam} 实际字面是 {style!r}，会合成粗体")
+        elif req == 400 and got is not None:
+            errors.append(f"标题请求 400，却落到 {fam} 的 {style!r}")
+        lines.append(f"    title face: {fam} {style!r} → {IDEAL.get(got or 0, 'Regular')}")
 
     lines.append("result: " + ("OK" if not errors else "FAIL"))
     lines.extend(f"  ! {e}" for e in errors)

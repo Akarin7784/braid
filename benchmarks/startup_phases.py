@@ -2,6 +2,11 @@
 """冷启动分阶段计时：python benchmarks/startup_phases.py [-n 5]。
 
 每次新开进程，输出各阶段中位数（ms）。
+
+注意：首次 show() 约有 55–60ms 的固定开销，来自 Qt 对整个窗口的首次样式套用与布局，
+并非右栏页面构建（ArtifactsPage 自身约 2ms）。推迟默认页或改变占位页替换方式只会把这笔
+开销在 show() 与 first paint 之间挪动，"TOTAL to first paint" 不变；要降低它，应减少首帧的
+控件数量与样式表复杂度。
 """
 
 from __future__ import annotations

@@ -165,6 +165,52 @@ jobs:
           name: selfcheck-${{ runner.os }}.txt
           path: selfcheck-${{ runner.os }}.txt
           if-no-files-found: warn
+      - name: 打包冷启动计时（只告警，不拦）
+        continue-on-error: true
+        shell: bash
+        env: {QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu"}
+        run: |
+          out="$PWD/startup-${{ runner.os }}.txt"; : > "$out"
+          case "${{ runner.os }}" in
+            Linux)   run() { QT_QPA_PLATFORM=xcb xvfb-run -a -s "-screen 0 1280x800x24" dist/braid/braid --startup-time "$1"; } ;;
+            Windows) run() { QT_QPA_PLATFORM=windows dist/braid/braid.exe --startup-time "$1"; } ;;
+            macOS)   run() { QT_QPA_PLATFORM=cocoa dist/Braid.app/Contents/MacOS/braid --startup-time "$1"; } ;;
+          esac
+          for i in 1 2 3; do
+            s=$(python -c "import time; print(time.time())")
+            run "run-$i.json" || echo "::warning::第 $i 次启动退出码 $?"
+            e=$(python -c "import time; print(time.time())")
+            python - "$i" "$s" "$e" "run-$i.json" >> "$out" <<'PY'
+          import json, sys
+          i, s, e, f = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
+          try:
+              d = json.load(open(f, encoding="utf-8"))
+          except Exception as ex:
+              d = {"error": repr(ex)}
+          d["run"] = int(i); d["cold"] = i == "1"; d["wall_ms"] = round((e - s) * 1000, 1)
+          print(json.dumps(d, ensure_ascii=False))
+          PY
+          done
+          python - "$out" <<'PY'
+          import json, statistics, sys
+          rows = [json.loads(l) for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
+          warm = [r for r in rows if not r["cold"] and "first_paint_ms" in r]
+          summ = {"summary": True,
+                  "cold_first_paint_ms": rows[0].get("first_paint_ms"), "cold_wall_ms": rows[0].get("wall_ms"),
+                  "warm_median_first_paint_ms": statistics.median(r["first_paint_ms"] for r in warm) if warm else None,
+                  "warm_median_wall_ms": statistics.median(r["wall_ms"] for r in warm) if warm else None}
+          open(sys.argv[1], "a", encoding="utf-8").write(json.dumps(summ, ensure_ascii=False) + "\n")
+          print(summ)
+          print(f"::notice::冷启动 首帧 {summ['cold_first_paint_ms']}ms / 墙钟 {summ['cold_wall_ms']}ms；热启动中位数 首帧 {summ['warm_median_first_paint_ms']}ms / 墙钟 {summ['warm_median_wall_ms']}ms")
+          PY
+          cat "$out"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: startup-${{ runner.os }}.txt
+          path: startup-${{ runner.os }}.txt
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: braid-${{ runner.os }}

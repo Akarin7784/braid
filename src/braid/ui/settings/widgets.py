@@ -123,7 +123,7 @@ class ToggleSwitch(QAbstractButton):
 
 
 class SegmentedControl(QWidget):
-    """分段选择：底色 control；选中块浅色 surface + e1、深色 row_sel；文字常规字重。"""
+    """分段选择：底色 control；选中块浅色 surface + e1、深色 active；文字常规字重。"""
 
     changed = Signal(str)
 
@@ -161,8 +161,8 @@ class SegmentedControl(QWidget):
 
     @staticmethod
     def block_color(dark: bool) -> QColor:
-        """选中块：浅色 surface（另加 e1 阴影），深色 row_sel（无阴影）。"""
-        return qcolor("row_sel" if dark else "surface", dark)
+        """选中块：浅色 surface（另加 e1 阴影），深色 active（无阴影）。"""
+        return qcolor("active" if dark else "surface", dark)
 
     def segment_rect(self, i: int) -> QRect:
         return QRect(SEG_PAD + i * self._seg_w, SEG_PAD, self._seg_w, self.height() - 2 * SEG_PAD)
@@ -202,6 +202,9 @@ class SettingRow(QWidget):
         self.setFixedHeight(ROW_H)
         self.label = QLabel(label, self)
         self.label.setObjectName("settingLabel")
+        lf = QFont(self.label.font())
+        lf.setWeight(QFont.Weight.Normal)  # 行标签常规字重，只有页标题加粗
+        self.label.setFont(lf)
         self.control = control
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)

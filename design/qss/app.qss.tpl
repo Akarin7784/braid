@@ -126,7 +126,7 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingsSubtitle { font-size: 13px; color: ${text2}; }
 #settingsEmpty { font-size: 13px; color: ${text3}; }
 #providerName { font-size: 14px; font-weight: 600; }
-#settingLabel { color: ${text}; }
+#settingLabel { color: ${text}; font-weight: normal; }
 #settingCardTitle { color: ${text2}; font-size: 12px; }
 #fieldLabel { color: ${text2}; font-size: 12px; }
 #fieldUnit { color: ${text3}; font-size: 12px; }

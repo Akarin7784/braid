@@ -385,7 +385,7 @@ def test_segmented_block_per_theme():
     from braid.theme.palette import qcolor
 
     assert SegmentedControl.block_color(False) == qcolor("surface", False)
-    assert SegmentedControl.block_color(True) == qcolor("row_sel", True)
+    assert SegmentedControl.block_color(True) == qcolor("active", True)
 
 
 def test_bash_rule_delete_icon(qtbot, tmp_path):
@@ -400,3 +400,30 @@ def test_bash_rule_delete_icon(qtbot, tmp_path):
     assert row.remove.icon_color() == qcolor("danger")
     row.remove.click()
     assert len(b.get_config("permissions")["bash_rules"]) == 1
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_row_labels_regular_weight(qtbot, tmp_path, theme):
+    from PySide6.QtGui import QFont
+
+    from braid.theme import load_qss
+    from braid.theme.palette import qcolor
+
+    page, _ = _settings(qtbot, tmp_path, 1)
+    page.setStyleSheet(load_qss(theme))
+    page.show()
+    qtbot.waitExposed(page)
+    rows = [r for p in page.pages.values() for c in p.findChildren(SettingCard) for r in c.rows()]
+    assert len(rows) >= 10
+    for r in rows:
+        r.label.ensurePolished()
+        assert r.label.font().weight() == QFont.Weight.Normal, r.label.text()
+        assert not r.label.font().bold()
+    line = next(x for x in load_qss(theme).splitlines() if x.startswith("#settingLabel"))
+    assert "font-weight: normal" in line
+    assert qcolor("text", theme == "dark").name().upper() in line.upper()
+    # 页标题才加粗（有真实粗字面时）
+    from braid.ui.settings.widgets import title_weight
+
+    t = page.models.header.title.font()
+    assert t.weight() == title_weight(t)

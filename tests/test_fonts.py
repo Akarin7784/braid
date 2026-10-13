@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib.resources import files
 
 import pytest
-from PySide6.QtGui import QFont, QFontDatabase, QTextLayout
+from PySide6.QtGui import QFont, QFontDatabase, QFontInfo, QTextLayout
 
 from braid.theme.fonts import apply_app_font, bundled_font_files, register_bundled_fonts
 from braid.ui.settings import widgets as spw
@@ -69,18 +69,40 @@ def test_title_weight_no_cjk(monkeypatch):
     assert spw.title_weight(QFont()) == QFont.Weight.Normal
 
 
+def _resolves(fam: str, style: str, w: int) -> bool:
+    """独立探测（QFontInfo，不经 title_font）：只含中文族的 QFont 按字重 w
+    （或再加样式名）时，Qt 是否真的选中 style 这个字面。"""
+    for use_style in (False, True):
+        f = QFont()
+        f.setFamilies([fam])
+        f.setPixelSize(18)
+        f.setWeight(QFont.Weight(w))
+        if use_style:
+            f.setStyleName(style)
+        info = QFontInfo(f)
+        if info.family() == fam and info.styleName() == style and int(info.weight()) == w:
+            return True
+    return False
+
+
 def test_title_font_uses_real_face(qapp):
-    """真实字体库下：中文落到 title_font 请求字重对应的真实字面，拉丁字母仍是 Inter。"""
+    """真实字体库下：标题中文落到真实字面且不合成；字重是 600→500→700 中第一个真正选得上的。"""
     register_bundled_fonts()
     base = QFont(qapp.font())
     base.setFamilies(["Inter", *spw.CJK_FALLBACK])
     f = spw.title_font(base, 18)
     w = int(f.weight())
-    assert w <= int(spw.title_weight(base))
-    if spw.resolved_cjk_family(base) is not None:
-        for _fam, style in _faces(f, "模型与服务"):
-            got = spw._style_weight(style)
-            assert (got is None) if w == 400 else (got == w), (style, w)
+    fam = spw.resolved_cjk_family(base)
+    if fam is not None:
+        # 1. 落到的字面真实存在于该族，且字面字重等于请求字重（没有合成粗体）
+        real = QFontDatabase.styles(fam)
+        for gf, style in _faces(f, "模型与服务"):
+            assert gf == fam, gf
+            assert style in real, (style, real)
+            assert (spw._style_weight(style) or 400) == w, (style, w)
+        # 2. 存在但 Qt 选不上的候选（如 CI 上的 Medium）跳过，取第一个选得上的，否则 400
+        expected = next((cw for cf, cs, cw in spw.title_faces(base) if _resolves(cf, cs, cw)), 400)
+        assert w == expected, (w, expected, spw.title_faces(base))
     assert {fam for fam, _ in _faces(f, "Models")} == {"Inter"}
 
 

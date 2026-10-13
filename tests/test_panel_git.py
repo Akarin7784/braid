@@ -211,3 +211,24 @@ def test_diff_cjk_glyphs_resolve_to_regular(qtbot):
     for run in lay.glyphRuns():
         rf = run.rawFont()
         assert rf.familyName() in cjk and rf.weight() == 400
+
+
+def test_branch_label_plain_text2_aligned_with_path(qtbot):
+    from PySide6.QtCore import QPoint
+
+    _, p = _page(qtbot)
+    p.resize(480, 400)
+    p.show()
+    qtbot.waitExposed(p)
+    lb = p.branch_label
+    assert "⎇" in lb.text()
+    img = QImage(lb.size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    lb.render(img)
+    assert img.pixelColor(lb.width() - 1, 1).alpha() == 0  # 无底色
+    assert _hex(lb.palette().color(lb.foregroundRole())) == tokens("light")["text2"]
+    row = p.rows[0]
+    win = p.window()
+    lx = lb.mapTo(win, QPoint(lb.contentsRect().left(), 0)).x()
+    px = row.mapTo(win, QPoint(row.path_x(), 0)).x()
+    assert lx == px

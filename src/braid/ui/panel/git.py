@@ -91,8 +91,8 @@ def git_qss(mode: str = "light") -> str:
     t = palette(mode == "dark")
     return f"""
 #GitFileScroll, #GitFileList {{ background: transparent; }}
-#BranchLabel {{ background: {t["control"]}; color: {t["text"]};
-    border-radius: 12px; padding: 4px 10px; font-size: 12px; }}
+#BranchLabel {{ background: transparent; color: {t["text2"]}; border: none;
+    padding: 0; font-size: 12px; }}
 """
 
 
@@ -114,6 +114,11 @@ class FileRow(QWidget):
         self.setFixedHeight(ROW_H)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFont(mono_font(12))
+
+    @classmethod
+    def path_x(cls) -> int:
+        """路径文字在行内的起始 x（顶部分支名与之左对齐）。"""
+        return cls.PAD + cls.CHEVRON_W + 8
 
     def dir_and_name(self) -> tuple[str, str]:
         d, sep, name = self.fc.path.rpartition("/")
@@ -185,7 +190,7 @@ class FileRow(QWidget):
             x_add -= tag_w + 8
             p.setPen(qcolor("text3", dark))
             p.drawText(QRect(x_add, 0, tag_w, ROW_H), mid, BIG_TAG)
-        x0 = self.PAD + self.CHEVRON_W + 8
+        x0 = self.path_x()
         avail = max(0, x_add - 12 - x0)
         d, name = self.dir_and_name()
         name_w = fm.horizontalAdvance(name)
@@ -390,7 +395,10 @@ class GitPage(QWidget):
         lay.setSpacing(12)
 
         top = QHBoxLayout()
+        top.setContentsMargins(FileRow.path_x(), 0, 0, 0)  # 与文件路径起始 x 对齐
         self.branch_label = QLabel()
+        self.branch_label.setIndent(0)
+        self.branch_label.setMargin(0)
         self.branch_label.setObjectName("BranchLabel")
         top.addWidget(self.branch_label)
         top.addStretch(1)

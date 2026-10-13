@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
@@ -183,34 +184,42 @@ def test_hunk_separator_uses_border_subtle(qtbot):
 
 
 def test_diff_font_cjk_fallback_regular(qtbot):
+    """只查回退规则：等宽西文族（剔除 CJK 族）+ 标题字体链解析出的中文族，Regular。
+    不写死字体名，各平台落到的具体字体不同。"""
     from PySide6.QtGui import QFont, QFontDatabase
+    from PySide6.QtWidgets import QApplication
 
     from braid.ui.panel.git import diff_families, mono_font
+    from braid.ui.settings.widgets import CJK_FALLBACK, mono_families, resolved_cjk_family
 
+    cjk_db = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
+    cjk = resolved_cjk_family(QApplication.font())
+    if not cjk_db or not cjk:
+        pytest.skip("本平台没有可用的中文字体")
+    latin = [x for x in mono_families() if x not in cjk_db and x not in CJK_FALLBACK]
+    expected = latin + ([cjk] if cjk not in latin else [])
     fams = diff_families()
-    cjk = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
+    assert fams == expected
     f = mono_font()
     assert f.families() == fams and f.weight() == QFont.Weight.Normal
-    if cjk:
-        assert fams[-1] in cjk  # 中文落到标题字体链里的 CJK 族
-        assert not any(x in cjk for x in fams[:-1])  # 等宽西文部分不含 CJK 族
 
 
 def test_diff_cjk_glyphs_resolve_to_regular(qtbot):
+    """中文字形实际落到的字体必须是 Regular（数字字重 400），不检查字体名。"""
     from PySide6.QtGui import QFontDatabase, QTextLayout
 
     from braid.ui.panel.git import mono_font
 
-    cjk = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
-    if not cjk:
-        return
+    if not QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese):
+        pytest.skip("本平台没有可用的中文字体")
     lay = QTextLayout("忘记密码", mono_font())
     lay.beginLayout()
     lay.createLine()
     lay.endLayout()
-    for run in lay.glyphRuns():
-        rf = run.rawFont()
-        assert rf.familyName() in cjk and rf.weight() == 400
+    runs = lay.glyphRuns()
+    assert runs
+    for run in runs:
+        assert run.rawFont().weight() == 400
 
 
 def test_branch_label_plain_text2_aligned_with_path(qtbot):

@@ -18,7 +18,6 @@ from PySide6.QtGui import (
     QImage,
     QKeyEvent,
     QKeySequence,
-    QShortcut,
 )
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -69,6 +68,9 @@ class _Input(QTextEdit):
         self.setAcceptRichText(False)
         self.setPlaceholderText("输入消息，/ 唤起命令…")
         self.menu_open = False
+        # 发送 / 换行的绑定（PortableText），由主窗口快捷键注册表按 keybinds 配置下发
+        self.send_key = "Return"
+        self.newline_key = "Shift+Return"
         self.textChanged.connect(self._check_slash)
 
     def _check_slash(self) -> None:
@@ -78,20 +80,25 @@ class _Input(QTextEdit):
         )
 
     def keyPressEvent(self, e: QKeyEvent) -> None:
-        k, mods = e.key(), e.modifiers()
+        k = e.key()
         if self.menu_open and k in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             self.navigate.emit(-1 if k == Qt.Key.Key_Up else 1)
             return
         if self.menu_open and k == Qt.Key.Key_Escape:
             self.escape.emit()
             return
-        if k in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if mods & Qt.KeyboardModifier.ShiftModifier:
-                self.insertPlainText("\n")
-            elif self.menu_open:
+        seq = _event_portable(e)
+        if seq and seq == self.newline_key:
+            self.insertPlainText("\n")
+            return
+        if seq and seq == self.send_key:
+            if self.menu_open:
                 self.accept.emit()
             else:
                 self.submit.emit()
+            return
+        if self.menu_open and k in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.accept.emit()
             return
         super().keyPressEvent(e)
 
@@ -122,6 +129,13 @@ class _Input(QTextEdit):
             e.acceptProposedAction()
         else:
             super().dropEvent(e)
+
+
+def _event_portable(e: QKeyEvent) -> str:
+    """按键事件 → PortableText；小键盘 Enter 视同 Return，忽略 Keypad 修饰。"""
+    key = Qt.Key.Key_Return if e.key() == Qt.Key.Key_Enter else Qt.Key(e.key())
+    mods = e.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+    return QKeySequence(mods | key).toString(QKeySequence.SequenceFormat.PortableText)
 
 
 def _chip(text: str) -> QToolButton:
@@ -182,7 +196,6 @@ class Composer(QFrame):
         self.model_chip.setToolTip("模型与推理强度（Ctrl+Shift+I）")
         self.model_menu = self._build_model_menu(models)
         self.model_chip.setMenu(self.model_menu)
-        QShortcut(QKeySequence("Ctrl+Shift+I"), self, self.open_model_menu)
         self.perm_chip = self._menu_chip(PERMISSIONS, self.permission, "permission")
         for c in (self.model_chip, self.perm_chip):
             bar.addWidget(c)
@@ -283,6 +296,18 @@ class Composer(QFrame):
         self.model_chip.setText(m.name + (f" · {REASONING_LABELS.get(lv, lv)}" if lv else ""))
         self.selectionChanged.emit(self.model_id, self.reasoning)
 
+    def set_key_bindings(self, bindings: dict[str, str]) -> None:
+        """接收快捷键注册表算出的完整绑定，更新发送 / 换行按键与提示文字。"""
+        from braid.ui.shortcuts import display_text
+
+        self.input.send_key = bindings.get("input.send") or "Return"
+        self.input.newline_key = bindings.get("input.newline") or "Shift+Return"
+        self._send_hint = display_text(self.input.send_key)
+        menu_key = bindings.get("input.model_menu", "")
+        tip = "模型与推理强度"
+        self.model_chip.setToolTip(f"{tip}（{display_text(menu_key)}）" if menu_key else tip)
+        self.set_busy(self.busy)
+
     def open_model_menu(self) -> None:
         self.model_chip.showMenu()
 
@@ -322,7 +347,8 @@ class Composer(QFrame):
     def set_busy(self, busy: bool) -> None:
         self.busy = busy
         self.send_btn.setText("\u25a0" if busy else "\u2191")
-        self.send_btn.setToolTip("停止生成" if busy else "发送（Enter）")
+        hint = getattr(self, "_send_hint", "Enter")
+        self.send_btn.setToolTip("停止生成" if busy else f"发送（{hint}）")
 
     def _send_or_stop(self) -> None:
         if self.busy:

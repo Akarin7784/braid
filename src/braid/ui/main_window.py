@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
 from braid.backends.mock_artifacts import MockArtifactSource
 from braid.backends.mock_browser import MockBrowserController
 from braid.backends.mock_git import MockGitSource
+from braid.core import keymap
 from braid.core.backend import AgentBackend, Session
 from braid.core.session_store import SessionStore
 from braid.core.settings import settings
@@ -37,6 +40,7 @@ from braid.ui.icon_button import IconButton
 from braid.ui.panel import RightPanel
 from braid.ui.panel.shell import MIN_WIDTH as PANEL_MIN
 from braid.ui.panel.shell import PanelSplitter, splitter_min_width
+from braid.ui.shortcuts import ShortcutRegistry
 from braid.ui.sidebar import Sidebar
 from braid.ui.window_controls import RIGHT_MARGIN, WindowControls
 
@@ -101,7 +105,7 @@ class MainWindow(QMainWindow):
         top.addWidget(DragArea(minimumHeight=24), 1)
         self.panel_toggle = IconButton("panel")
         self.panel_toggle.setObjectName("PanelToggle")
-        self.panel_toggle.clicked.connect(lambda: self.set_panel_open(not self.panel_open()))
+        self.panel_toggle.clicked.connect(self.toggle_panel)
         top.addWidget(self.panel_toggle, 0, center)
         # 右栏收起时窗口按钮浮在这里：开关距按钮 8px；右栏打开时开关贴中栏右缘 16px
         self._top_spacer = QSpacerItem(0, 0)
@@ -156,6 +160,10 @@ class MainWindow(QMainWindow):
         self._anim: QVariantAnimation | None = None
         self._panel_before_settings: bool | None = None
         self._place_controls()
+        backend.config_changed.connect(self._on_config_changed)
+        self.shortcuts = ShortcutRegistry(self, backend, self._shortcut_handlers())
+        self.shortcuts.bindingsChanged.connect(composer.set_key_bindings)
+        composer.set_key_bindings(self.shortcuts.bindings)
         try:
             from braid.theme.shadows import apply_shadow
 
@@ -191,7 +199,6 @@ class MainWindow(QMainWindow):
             from braid.ui.settings_page import SettingsPage
 
             self.settings_page = SettingsPage(backend=self.backend)
-            self.backend.config_changed.connect(self._on_config_changed)
             self._center_layout.insertWidget(
                 self._center_layout.indexOf(self.chat_view), self.settings_page, 1
             )
@@ -242,6 +249,8 @@ class MainWindow(QMainWindow):
             s.model_id, s.reasoning = model_id, reasoning
 
     def _submit(self, text: str, attachments: list[str]) -> None:
+        if not attachments and self._typed_command(text):
+            return
         self.chat.model_id = self.composer.model_id
         self.chat.reasoning = self.composer.reasoning
         if attachments:
@@ -256,6 +265,90 @@ class MainWindow(QMainWindow):
             self.sidebar.new_session()
         elif name == "branch":
             self.branch_current()
+        elif name == "help":
+            self._note(self.help_text())
+        elif name == "model":
+            self.model_command("")
+
+    def _typed_command(self, text: str) -> bool:
+        """整条消息是 ``/命令 [参数]`` 时按命令执行，例如 ``/model mock-fast``。"""
+        if not text.startswith("/") or "\n" in text:
+            return False
+        name, _sp, arg = text[1:].partition(" ")
+        if name not in {c.name for c in self.composer.commands}:
+            return False
+        if name == "model":
+            self.model_command(arg.strip())
+        else:
+            self._command(name)
+        return True
+
+    def _note(self, text: str) -> None:
+        """命令结果以本地助手消息显示，不发给后端。"""
+        self.show_settings(False)
+        m = self.chat_view.chat_model
+        m.append("assistant", text)
+
+    def help_text(self) -> str:
+        lines = ["**可用命令**", ""]
+        lines += [f"- `/{c.name}` {c.hint}" for c in self.composer.commands]
+        lines += ["", "**快捷键**", ""]
+        for gid, gname in keymap.GROUPS:
+            items = []
+            for a in keymap.ACTIONS:
+                if a.group != gid:
+                    continue
+                key = self.shortcuts.display(a.id)
+                items.append(f"- {a.name}：`{key}`" if key else f"- {a.name}：未设置")
+            if items:
+                lines += [f"*{gname}*", "", *items, ""]
+        return "\n".join(lines).rstrip() + "\n"
+
+    def _agent_model_note(self) -> str:
+        try:
+            cfg = self.backend.get_config("agents")
+        except (KeyError, NotImplementedError):
+            return ""
+        agents = cfg.get("agents") if isinstance(cfg, dict) else None
+        if not isinstance(agents, list):
+            return ""
+        aid = cfg.get("default_agent")
+        agent = next((a for a in agents if isinstance(a, dict) and a.get("id") == aid), None)
+        if agent is None:
+            return ""
+        own = str(agent.get("model") or "")
+        name = agent.get("name") or aid
+        if not own:
+            return f"当前智能体「{name}」跟随所选模型。"
+        m = self.composer.models.get(own)
+        return f"当前智能体「{name}」固定使用 {m.name if m else own}。"
+
+    def model_command(self, arg: str) -> None:
+        """``/model``：无参数时列出模型；带参数时按 id 或名称（不分大小写）切换。"""
+        models = self.composer.models
+        if arg:
+            q = arg.lower()
+            hit = models.get(arg) or next(
+                (m for m in models.values() if q in (m.id.lower(), m.name.lower())), None
+            )
+            if hit is None:
+                hit = next((m for m in models.values() if m.name.lower().startswith(q)), None)
+            if hit is None:
+                self._note(f"没有找到模型 `{arg}`。输入 `/model` 查看可用模型。")
+                return
+            self.composer.set_selection(hit.id, self.composer.reasoning)
+            self._note(f"已切换到 **{self.composer.model_chip.text()}**。")
+            return
+        lines = ["**可用模型**", ""]
+        for m in models.values():
+            mark = "（当前）" if m.id == self.composer.model_id else ""
+            lines.append(f"- {m.name} `{m.id}`{mark}")
+        note = self._agent_model_note()
+        key = self.shortcuts.display("input.model_menu")
+        tail = "输入 `/model <id>` 切换"
+        tail += f"，或按 `{key}` 打开模型菜单。" if key else "。"
+        lines += ["", *([note] if note else []), tail]
+        self._note("\n".join(lines) + "\n")
 
     def branch_current(self) -> Session | None:
         """从当前会话的最后一条消息开分支，归到同一个项目。"""
@@ -266,6 +359,59 @@ class MainWindow(QMainWindow):
         if b.project_id is None:
             b.project_id = cur.project_id
         return self.sidebar.add_session(b)
+
+    # ---- 快捷键 ----
+    def _shortcut_handlers(self) -> dict[str, Callable[[], None]]:
+        return {
+            "session.new": lambda: self._command("new"),
+            "session.switch": self.switch_session,
+            "session.search": self._focus_search,
+            "input.command_palette": self._open_command_palette,
+            "input.model_menu": self.composer.open_model_menu,
+            "panel.toggle_sidebar": self.sidebar_toggle.click,
+            # 与右上角收起按钮走同一个入口，进设置自动收起（#49）和按钮状态保持一致
+            "panel.toggle_right": self.panel_toggle.click,
+            "panel.next_tab": self._next_panel_tab,
+            "app.settings": lambda: self.show_settings(not self.settings_open()),
+            "app.toggle_theme": self._toggle_theme,
+        }
+
+    def switch_session(self) -> None:
+        """切到下一个会话（循环）。"""
+        if not self._sessions:
+            return
+        cur = getattr(self, "_current", None)
+        ids = [s.id for s in self._sessions]
+        i = ids.index(cur.id) if cur is not None and cur.id in ids else -1
+        self.sidebar.select(ids[(i + 1) % len(ids)])
+
+    def _focus_search(self) -> None:
+        self.sidebar.setVisible(True)
+        self.sidebar.search.setFocus()
+        self.sidebar.search.selectAll()
+
+    def _open_command_palette(self) -> None:
+        if self.settings_open():
+            self.show_settings(False)
+        self.composer.set_text("/")
+
+    def _next_panel_tab(self) -> None:
+        if not self.panel_open():
+            return
+        n = self.panel_tabs.count()
+        if n:
+            self.panel.set_current((self.panel.current_index() + 1) % n)
+
+    def _toggle_theme(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        dark = bool(app.property("braidDark")) if app is not None else False
+        self.backend.set_config("general", {"theme": "light" if dark else "dark"})
+
+    def toggle_panel(self) -> None:
+        """右上角收起按钮与 ``panel.toggle_right`` 共用的唯一入口。"""
+        self.set_panel_open(not self.panel_open())
 
     def _toggle_max(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()

@@ -78,7 +78,16 @@ class _Theme:
 THEME = _Theme()
 _FIXED_LH = 2  # QTextBlockFormat.LineHeightTypes.FixedHeight
 
-_FENCE_RE = re.compile(r"^(?P<ind> {0,3})(?P<f>`{3,}|~{3,})(?P<info>[^\n]*)$")
+# 列表项里的围栏会随列表缩进（"1. " 后的内容缩进 3 格或更多），所以不限缩进宽度。
+_FENCE_RE = re.compile(r"^(?P<ind> *)(?P<f>`{3,}|~{3,})(?P<info>[^\n]*)$")
+
+
+def _dedent(line: str, n: int) -> str:
+    """去掉围栏所在容器的缩进（最多 n 个空格），与 CommonMark 一致。"""
+    k = 0
+    while k < n and k < len(line) and line[k] == " ":
+        k += 1
+    return line[k:]
 
 
 def parse_code_fences(text: str) -> list[tuple[int, int, str]]:
@@ -92,13 +101,14 @@ def parse_code_fences(text: str) -> list[tuple[int, int, str]]:
             i += 1
             continue
         fence = m.group("f")
+        ind = len(m.group("ind"))
         j = i + 1
         while j < len(lines):
             n = lines[j].strip()
             if n.startswith(fence[0] * len(fence)) and not n.strip(fence[0]):
                 break
             j += 1
-        out.append((i, j, "\n".join(lines[i + 1 : j])))
+        out.append((i, j, "\n".join(_dedent(x, ind) for x in lines[i + 1 : j])))
         i = j + 1
     return out
 
@@ -271,13 +281,34 @@ def _lexer(lang: str) -> Any:
         return TextLexer()
 
 
+# 代码高亮配色：tokens.json 没有专门的语法色，浅色深色都从现有调色板取，
+# 不用 Pygments 自带主题（浅色 default 是纯绿 / 纯蓝，深色 github-dark 也不跟 tokens）。
+# 只用四种色：关键字 brand、字符串 success、数字等字面量 warning、注释 text3；
+# 函数 / 类 / 内置 / 装饰器 / 运算符 / 标点等其余一律保持正文色。按前缀匹配，越靠前越具体。
+SYNTAX_TOKENS: tuple[tuple[str, str], ...] = (
+    ("Comment", "text3"),
+    ("Keyword", "brand"),
+    ("Literal.String", "success"),
+    ("Literal", "warning"),
+)
+
+
+def syntax_color(ttype: Any, dark: bool) -> str | None:
+    """Pygments token 类型 → tokens.json 里的颜色；None 表示用正文色。"""
+    name = ".".join(ttype) if isinstance(ttype, tuple) else str(ttype)
+    name = name.removeprefix("Token.")
+    for prefix, key in SYNTAX_TOKENS:
+        if name == prefix or name.startswith(prefix + "."):
+            return str(THEME[dark][key])
+    return None
+
+
 def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
     """给 Markdown 渲染出的代码块按 Pygments token 上色（没装 Pygments 时跳过）。"""
     try:
-        from pygments.styles import get_style_by_name
+        import pygments  # noqa: F401
     except ImportError:
         return
-    style = get_style_by_name("github-dark" if dark else "default")
     block = doc.begin()
     while block.isValid():
         lang = block.blockFormat().property(QTextFormat.Property.BlockCodeLanguage)
@@ -296,12 +327,14 @@ def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
         lexer = _lexer(str(lang or "text"))
         cur = QTextCursor(doc)
         pos = start.position()
+        # 只在这段代码内上色：Pygments 末尾会补一个换行，越界会染到下一段（如列表序号）
+        limit = start.position() + len("\n".join(lines))
         for ttype, value in lexer.get_tokens("\n".join(lines)):
-            st = style.style_for_token(ttype)
-            end = min(pos + len(value), doc.characterCount() - 1)
-            if st["color"] and end > pos:
+            color = syntax_color(ttype, dark)
+            end = min(pos + len(value), limit)
+            if color and end > pos:
                 fmt = QTextCharFormat()
-                fmt.setForeground(QColor("#" + st["color"]))
+                fmt.setForeground(QColor(color))
                 cur.setPosition(pos)
                 cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
                 cur.mergeCharFormat(fmt)
@@ -544,7 +577,10 @@ class _DocCache:
                     r1 = lay.blockBoundingRect(b1)
                     top = int(r0.top()) - CODE_VPAD
                     bottom = int(r1.top()) + CODE_LINE_H + CODE_VPAD + (TOGGLE_H if col else 0)
-                    rect = QRect(0, top, width, max(1, bottom - top))
+                    # 列表里的代码块随列表缩进，底色矩形与代码左缘对齐
+                    left = int(b0.blockFormat().indent() * doc.indentWidth())
+                    left = max(0, min(left, width - 2 * CODE_PAD))
+                    rect = QRect(left, top, width - left, max(1, bottom - top))
                     blocks.append(CodeBlockInfo(i, rect, code, n, col))
             self._d[key] = doc
             self._blocks[id(doc)] = blocks

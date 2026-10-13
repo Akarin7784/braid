@@ -1,4 +1,5 @@
 import sys
+import time
 
 from PySide6.QtWidgets import QApplication
 
@@ -18,7 +19,11 @@ def main() -> int:
 
     if selfcheck.requested(sys.argv):
         return selfcheck.run(sys.argv)
+    from braid import startup
+
+    timing, timing_out = startup.parse(sys.argv)
     app = QApplication(sys.argv)
+    t_app = time.perf_counter()
     apply_app_font(app)
     theme = "dark" if "--dark" in sys.argv else "light"
     app.setProperty("braidDark", theme == "dark")
@@ -27,7 +32,11 @@ def main() -> int:
     backend.set_config("general", {"theme": theme})
     w = MainWindow(backend)
     w.chat_view.set_dark(theme == "dark")
+    if timing:
+        startup.install(app, w, t_app, timing_out)
     w.show()
+    if timing:
+        w._startup_mark()  # type: ignore[attr-defined]
     tray = Tray(w)
     tray.show()
     return app.exec()

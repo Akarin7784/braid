@@ -1,9 +1,18 @@
-"""左侧会话栏：新建、搜索、重命名、删除、置顶；分组"置顶/最近"；项目/产物/定时任务入口。"""
+"""左侧会话栏：新建、搜索、重命名、删除、置顶；按项目分组（无项目归入"未分配"），组可折叠。"""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPoint, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter
+from PySide6.QtCore import (
+    QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
+    QPointF,
+    QRectF,
+    QSize,
+    Qt,
+    Signal,
+)
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -22,24 +31,47 @@ from braid.core.backend import AgentBackend, Session
 
 SID = Qt.ItemDataRole.UserRole
 HEADER = Qt.ItemDataRole.UserRole + 1
-_ACTIVE_FALLBACK = {False: "#E9E9E8", True: "#3A3A39"}
+GROUP = Qt.ItemDataRole.UserRole + 2  # 组标题：组 key
+FIRST = Qt.ItemDataRole.UserRole + 3  # 是否第一组（上方只留 8px）
+COLLAPSED = Qt.ItemDataRole.UserRole + 4
+
+UNASSIGNED = "未分配"
+ROW_H = 32
+ROW_GAP = 2
+HEADER_TOP, HEADER_TOP_FIRST, HEADER_BOTTOM, HEADER_TEXT_H = 20, 8, 8, 14
+ARROW = 12
+
+_FALLBACK = {
+    False: {"row_sel": "#EDEDEC", "text": "#1F1F1E", "text2": "#6B6B69", "text3": "#9E9E9B"},
+    True: {"row_sel": "#2B2B2A", "text": "#ECECEA", "text2": "#A3A3A0", "text3": "#73736F"},
+}
 
 
-def _load_active() -> dict[bool, str]:
-    """读包内 braid/theme/tokens.json 的 active token，读不到用默认值。"""
+def _load_tokens() -> dict[bool, dict[str, str]]:
+    """读包内 tokens.json；缺的键（如尚未合入的 row_sel）用默认值。"""
     import json
     from importlib.resources import files
 
+    out = {k: dict(v) for k, v in _FALLBACK.items()}
     try:
         t = json.loads((files("braid.theme") / "tokens.json").read_text(encoding="utf-8"))
-        return {False: t["light"]["active"], True: t["dark"]["active"]}
-    except (OSError, ValueError, KeyError, ModuleNotFoundError):
-        return dict(_ACTIVE_FALLBACK)
+    except (OSError, ValueError, ModuleNotFoundError):
+        return out
+    for dark, name in ((False, "light"), (True, "dark")):
+        for k in out[dark]:
+            if k in t.get(name, {}):
+                out[dark][k] = t[name][k]
+    return out
 
 
-SELECTED_BG = _load_active()
-HOVER_BG = {False: "#ECECEB", True: "#2E2E2C"}
-HEADER_FG = {False: "#8A8A87", True: "#8A8A87"}
+TOKENS = _load_tokens()
+SELECTED_BG = {d: TOKENS[d]["row_sel"] for d in (False, True)}
+
+
+def _hover(dark: bool) -> QColor:
+    c = QColor(SELECTED_BG[dark])
+    c.setAlphaF(0.6)
+    return c
 
 
 def _dark() -> bool:
@@ -48,51 +80,66 @@ def _dark() -> bool:
 
 
 class SessionDelegate(QStyledItemDelegate):
-    """选中项画明显的浅色圆角底（深浅主题都有），分组标题画小号灰字。"""
+    """组标题：12px 箭头 + 11px text3；会话行：row_sel 淡底，常规字重。"""
 
     def paint(
         self, p: QPainter, opt: QStyleOptionViewItem, idx: QModelIndex | QPersistentModelIndex
     ) -> None:
         dark = _dark()
-        r = QRectF(opt.rect).adjusted(2, 1, -2, -1)
+        t = TOKENS[dark]
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
         if idx.data(HEADER):
-            p.save()
-            f = opt.font
-            f.setPointSizeF(max(f.pointSizeF() - 1.5, 7))
+            top = HEADER_TOP_FIRST if idx.data(FIRST) else HEADER_TOP
+            band = QRectF(
+                opt.rect.x() + 8, opt.rect.y() + top, opt.rect.width() - 16, HEADER_TEXT_H
+            )
+            c = QColor(t["text3"])
+            pen = QPen(c, 1.2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            cx, cy = band.x() + ARROW / 2, band.center().y()
+            if idx.data(COLLAPSED):
+                pts = [QPointF(cx - 1.5, cy - 3), QPointF(cx + 1.5, cy), QPointF(cx - 1.5, cy + 3)]
+            else:
+                pts = [QPointF(cx - 3, cy - 1.5), QPointF(cx, cy + 1.5), QPointF(cx + 3, cy - 1.5)]
+            p.drawPolyline(pts)
+            f = QFont(opt.font)
+            f.setPixelSize(11)
+            f.setWeight(QFont.Weight.Normal)
             p.setFont(f)
-            p.setPen(QColor(HEADER_FG[dark]))
             p.drawText(
-                r.adjusted(8, 0, 0, 0),
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+                band.adjusted(ARROW + 4, 0, 0, 0),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 idx.data(),
             )
             p.restore()
             return
-        state = opt.state
-        p.save()
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        bg = None
-        if state & QStyle.StateFlag.State_Selected:
-            bg = SELECTED_BG[dark]
-        elif state & QStyle.StateFlag.State_MouseOver:
-            bg = HOVER_BG[dark]
-        if bg:
+        r = QRectF(opt.rect).adjusted(2, ROW_GAP / 2, -2, -ROW_GAP / 2)
+        sel = bool(opt.state & QStyle.StateFlag.State_Selected)
+        if sel:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(bg))
+            p.setBrush(QColor(SELECTED_BG[dark]))
             p.drawRoundedRect(r, 8, 8)
-        p.restore()
-        o = QStyleOptionViewItem(opt)
-        self.initStyleOption(o, idx)
-        o.state &= ~(
-            QStyle.StateFlag.State_Selected
-            | QStyle.StateFlag.State_MouseOver
-            | QStyle.StateFlag.State_HasFocus
+        elif opt.state & QStyle.StateFlag.State_MouseOver:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(_hover(dark))
+            p.drawRoundedRect(r, 8, 8)
+        f = QFont(opt.font)
+        f.setWeight(QFont.Weight.Normal)
+        f.setBold(False)
+        p.setFont(f)
+        p.setPen(QColor(t["text"] if sel else t["text2"]))
+        text = p.fontMetrics().elidedText(
+            idx.data() or "", Qt.TextElideMode.ElideRight, int(r.width()) - 20
         )
-        o.backgroundBrush = QBrush(Qt.BrushStyle.NoBrush)
-        o.rect = opt.rect.adjusted(10, 0, -6, 0)
-        w = o.widget
-        style = w.style() if w else QApplication.style()
-        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, o, p, w)
+        p.drawText(
+            r.adjusted(10, 0, -10, 0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            text,
+        )
+        p.restore()
 
 
 class Sidebar(QFrame):
@@ -107,6 +154,7 @@ class Sidebar(QFrame):
         self.pinned: set[str] = set()
         self._current: str | None = None
         self._rebuilding = False
+        self.collapsed: set[str] = set()  # 折叠的组 key
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 12, 12, 12)
@@ -141,6 +189,7 @@ class Sidebar(QFrame):
         self.list.customContextMenuRequested.connect(self._context_menu)
         self.list.currentItemChanged.connect(self._on_current)
         self.list.itemChanged.connect(self._on_edited)
+        self.list.itemClicked.connect(self._on_clicked)
         lay.addWidget(self.list, 1)
         self.rebuild()
 
@@ -191,7 +240,7 @@ class Sidebar(QFrame):
                 return
 
     def groups(self) -> dict[str, list[str]]:
-        """当前可见的分组 -> 会话标题（测试与调试用）。"""
+        """当前可见的分组 -> 会话标题（测试与调试用；折叠组为空列表）。"""
         out: dict[str, list[str]] = {}
         g = ""
         for i in range(self.list.count()):
@@ -203,23 +252,54 @@ class Sidebar(QFrame):
                 out[g].append(it.text())
         return out
 
+    def toggle_group(self, key: str) -> None:
+        self.collapsed.symmetric_difference_update({key})
+        self.rebuild()
+
+    def _grouped(self, vis: list[Session]) -> list[tuple[str, list[Session]]]:
+        order: list[str] = []
+        buckets: dict[str, list[Session]] = {}
+        for s in vis:
+            key = s.project or ""
+            if key not in buckets:
+                buckets[key] = []
+                if key:
+                    order.append(key)
+            buckets[key].append(s)
+        if "" in buckets:
+            order.append("")
+        pos = {s.id: i for i, s in enumerate(self.sessions)}
+
+        def rank(s: Session) -> tuple[int, float, int]:
+            ts: object = getattr(s, "updated_at", None)
+            stamp = 0.0
+            if hasattr(ts, "timestamp"):
+                stamp = -float(ts.timestamp())
+            elif isinstance(ts, (int, float)):
+                stamp = -float(ts)
+            return (0 if s.id in self.pinned else 1, stamp, pos[s.id])
+
+        return [(k, sorted(buckets[k], key=rank)) for k in order]
+
     # ---- 视图 ----
     def rebuild(self) -> None:
         self._rebuilding = True
         self.list.clear()
         q = self.search.text().strip().lower()
         vis = [s for s in self.sessions if q in s.title.lower()]
-        for name, items in (
-            ("置顶", [s for s in vis if s.id in self.pinned]),
-            ("最近", [s for s in vis if s.id not in self.pinned]),
-        ):
-            if not items:
-                continue
-            h = QListWidgetItem(name)
+        for n, (key, items) in enumerate(self._grouped(vis)):
+            h = QListWidgetItem(key or UNASSIGNED)
             h.setData(HEADER, True)
-            h.setFlags(Qt.ItemFlag.NoItemFlags)
-            h.setSizeHint(QSize(0, 28))
+            h.setData(GROUP, key)
+            h.setData(FIRST, n == 0)
+            folded = key in self.collapsed and not q
+            h.setData(COLLAPSED, folded)
+            h.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            top = HEADER_TOP_FIRST if n == 0 else HEADER_TOP
+            h.setSizeHint(QSize(0, top + HEADER_TEXT_H + HEADER_BOTTOM))
             self.list.addItem(h)
+            if folded:
+                continue
             for s in items:
                 it = QListWidgetItem(s.title)
                 it.setData(SID, s.id)
@@ -228,11 +308,15 @@ class Sidebar(QFrame):
                     | Qt.ItemFlag.ItemIsSelectable
                     | Qt.ItemFlag.ItemIsEditable
                 )
-                it.setSizeHint(QSize(0, 32))
+                it.setSizeHint(QSize(0, ROW_H + ROW_GAP))
                 self.list.addItem(it)
         self._rebuilding = False
         if self._current:
             self.select(self._current)
+
+    def _on_clicked(self, it: QListWidgetItem) -> None:
+        if it.data(HEADER):
+            self.toggle_group(it.data(GROUP))
 
     def _on_current(self, cur: QListWidgetItem | None, _prev: QListWidgetItem | None) -> None:
         if self._rebuilding or cur is None or cur.data(HEADER):

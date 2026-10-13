@@ -70,27 +70,48 @@ def bar(qtbot):
     return s
 
 
-def test_grouping_and_pin(bar):
-    assert list(bar.groups()) == ["最近"]
-    sid = bar.sessions[1].id
-    bar.toggle_pin(sid)
+def test_grouping_by_project_and_pin(bar):
     g = bar.groups()
-    assert list(g) == ["置顶", "最近"] and g["置顶"] == ["写周报"]
+    assert list(g) == ["Braid", "未分配"]
+    assert g["Braid"] == ["重构登录模块", "调研 PySide6 打包"]
+    assert g["未分配"] == ["写周报"]
+    sid = bar.sessions[2].id  # 调研 PySide6 打包
     bar.toggle_pin(sid)
-    assert list(bar.groups()) == ["最近"]
+    assert bar.groups()["Braid"][0] == "调研 PySide6 打包"
+    bar.toggle_pin(sid)
+    assert bar.groups()["Braid"][0] == "重构登录模块"
+
+
+def test_group_collapse(bar):
+    bar.toggle_group("Braid")
+    assert bar.groups()["Braid"] == []
+    bar.toggle_group("Braid")
+    assert len(bar.groups()["Braid"]) == 2
+
+
+def test_header_spacing_and_row_height(bar):
+    from braid.ui.sidebar import HEADER
+
+    heads = [bar.list.item(i) for i in range(bar.list.count()) if bar.list.item(i).data(HEADER)]
+    assert heads[0].sizeHint().height() == 8 + 14 + 8
+    assert heads[1].sizeHint().height() == 20 + 14 + 8
+    row = next(
+        bar.list.item(i) for i in range(bar.list.count()) if not bar.list.item(i).data(HEADER)
+    )
+    assert row.sizeHint().height() == 34
 
 
 def test_new_session(bar, qtbot):
     with qtbot.waitSignal(bar.sessionSelected) as sig:
         s = bar.new_session()
     assert sig.args[0] is s
-    assert bar.groups()["最近"][0] == "新对话"
+    assert bar.groups()["未分配"][0] == "新对话"
 
 
 def test_rename(bar):
     sid = bar.sessions[0].id
     bar.rename_session(sid, "  新名字 ")
-    assert "新名字" in bar.groups()["最近"]
+    assert "新名字" in bar.groups()["Braid"]
 
 
 def test_rename_via_edit(bar):
@@ -105,17 +126,17 @@ def test_delete(bar):
     sid = bar.sessions[0].id
     bar.delete_session(sid)
     assert bar.session(sid) is None
-    assert len(bar.groups()["最近"]) == 2
+    assert sum(map(len, bar.groups().values())) == 2
     assert bar.list.currentItem() is not None
 
 
 def test_search(bar):
     bar.search.setText("周报")
-    assert bar.groups() == {"最近": ["写周报"]}
+    assert bar.groups() == {"未分配": ["写周报"]}
     bar.search.setText("不存在")
     assert bar.groups() == {}
     bar.search.clear()
-    assert len(bar.groups()["最近"]) == 3
+    assert sum(map(len, bar.groups().values())) == 3
 
 
 def test_entries(bar, qtbot):
@@ -153,10 +174,10 @@ def test_center_fills_when_panel_collapsed(win, qtbot):
     assert win.panel.width() >= 240
 
 
-def test_selected_bg_uses_active_token():
+def test_selected_bg_uses_row_sel_token():
     from braid.ui.sidebar import SELECTED_BG
 
-    assert SELECTED_BG == {False: "#E9E9E8", True: "#3A3A39"}
+    assert SELECTED_BG == {False: "#EDEDEC", True: "#2B2B2A"}
 
 
 def test_window_control_properties_and_qss_hover(win, qtbot):

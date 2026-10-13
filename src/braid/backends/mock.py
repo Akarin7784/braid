@@ -25,8 +25,13 @@ class MockBackend(AgentBackend):
     def __init__(self) -> None:
         self._ids = itertools.count(1)
         self._sessions: dict[str, Session] = {}
-        for t in ["重构登录模块", "写周报", "调研 PySide6 打包"]:
+        for t, proj in [
+            ("重构登录模块", "Braid"),
+            ("写周报", None),
+            ("调研 PySide6 打包", "Braid"),
+        ]:
             s = self.create_session(t)
+            s.project = proj
             s.messages += [
                 Message("user", f"帮我{t}"),
                 Message("assistant", DEMO_REPLY),

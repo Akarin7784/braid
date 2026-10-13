@@ -9,19 +9,29 @@ from typing import Literal
 from PySide6.QtCore import QObject, Signal
 
 FileStatus = Literal["A", "M", "D"]
-LineKind = Literal["ctx", "add", "del"]
+LineKind = Literal["ctx", "add", "del", "hunk"]
 
 
 @dataclass(frozen=True)
 class FileChange:
     path: str
     status: FileStatus
+    additions: int = 0  # 增行数
+    deletions: int = 0  # 删行数
+
+    @property
+    def changed_lines(self) -> int:
+        return self.additions + self.deletions
 
 
 @dataclass(frozen=True)
 class DiffLine:
+    """一行 diff。``hunk`` 行的 text 是 ``@@ -a,b +c,d @@`` 范围，行号为 None；
+    增行只有新行号，删行只有旧行号，上下文行两者都有。"""
+
     kind: LineKind
-    lineno: int  # 显示的行号（删行为旧行号，其余为新行号）
+    old: int | None
+    new: int | None
     text: str
 
 

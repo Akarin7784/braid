@@ -283,3 +283,32 @@ def test_settings_entry_switches_center(win, qtbot):
     win.show_settings(True)
     win.sidebar.select(win.sidebar.sessions[1].id)
     assert not win.settings_open() and win.chat_view.isVisible()
+
+
+def test_window_min_width_fits_columns(win, qtbot):
+    from braid.ui.panel.shell import splitter_min_width
+
+    sp = win.splitter
+
+    def need() -> int:
+        vis = [sp.widget(i) for i in range(sp.count()) if not sp.widget(i).isHidden()]
+        return sum(splitter_min_width(w) for w in vis) + sp.handleWidth() * (len(vis) - 1)
+
+    win.set_panel_open(True, animate=False)
+    assert win.minimumWidth() >= need()
+    opened = win.minimumWidth()
+    win.set_panel_open(False, animate=False)
+    assert need() <= win.minimumWidth() < opened
+
+
+def test_panel_collapse_animates_below_min(win, qtbot):
+    from braid.ui.panel.shell import MIN_WIDTH
+
+    win.resize(1280, 800)
+    win.set_panel_open(True, animate=False)
+    seen: list[int] = []
+    win.set_panel_open(False, animate=True)
+    win._anim.valueChanged.connect(lambda _v: seen.append(win.splitter.sizes()[2]))
+    qtbot.waitUntil(lambda: not win.panel.isVisible(), timeout=2000)
+    assert any(0 < w < MIN_WIDTH for w in seen)
+    assert win.panel.minimumWidth() == MIN_WIDTH

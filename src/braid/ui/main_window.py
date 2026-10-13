@@ -26,7 +26,8 @@ from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
 from braid.ui.icon_button import IconButton
 from braid.ui.panel import RightPanel
-from braid.ui.panel.shell import PanelSplitter
+from braid.ui.panel.shell import MIN_WIDTH as PANEL_MIN
+from braid.ui.panel.shell import PanelSplitter, splitter_min_width
 from braid.ui.sidebar import Sidebar
 from braid.ui.window_controls import RIGHT_MARGIN, WindowControls
 
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         split.setStretchFactor(1, 1)
         self.splitter = split
         self.setCentralWidget(split)
+        self._update_min_width()
         self._panel_width = 420
 
         # 唯一一份窗口控制按钮：主窗口的浮层子控件
@@ -219,6 +221,9 @@ class MainWindow(QMainWindow):
         target = self._panel_width if open_ else 0
         start = sizes[2] if self.panel.isVisible() else 0
         self.panel.setVisible(True)
+        # 动画期间放开右栏下限，才能平滑缩到 0 / 从 0 展开；结束后恢复 320
+        if animate:
+            self.panel.setMinimumWidth(1)
         self._sync_top_spacer()
 
         def step(v: object) -> None:
@@ -229,8 +234,10 @@ class MainWindow(QMainWindow):
             self._place_controls()
 
         def done() -> None:
+            self.panel.setMinimumWidth(PANEL_MIN)
             if not open_:
                 self.panel.setVisible(False)
+            self._update_min_width()
             self._place_controls()
             self._sync_top_spacer()
 
@@ -244,6 +251,14 @@ class MainWindow(QMainWindow):
         a.finished.connect(done)
         self._anim = a
         a.start()
+
+    def _update_min_width(self) -> None:
+        """窗口最小宽度 = 各可见栏在分割器里的最小宽度 + 分割条，避免中栏被压到下限以下。"""
+        sp = self.splitter
+        ws = [sp.widget(i) for i in range(sp.count())]
+        vis = [w for w in ws if w is not None and not w.isHidden()]
+        need = sum(splitter_min_width(w) for w in vis) + sp.handleWidth() * max(len(vis) - 1, 0)
+        self.setMinimumWidth(max(need, 560))
 
     def _sync_top_spacer(self) -> None:
         sp = getattr(self, "_top_spacer", None)

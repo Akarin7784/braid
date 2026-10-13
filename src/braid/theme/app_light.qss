@@ -111,4 +111,4 @@ QMenu::separator { height: 1px; margin: 5px 10px; background: transparent; }
 QMenu::section { color: #9E9E9B; font-size: 12px; padding: 8px 12px 4px 12px; }
 QToolButton[role="modelChip"] { background: #F0F0EF; border-radius: 12px; padding: 4px 34px 4px 12px; font-size: 12px; }
 QToolButton[role="modelChip"]:hover, QToolButton[role="modelChip"][popupOpen="true"] { background: #ECECEB; }
-QToolButton[role="modelChip"]::menu-indicator { image: url(${assets}/icons/chevron_down_light.png); width: 10px; height: 10px; subcontrol-position: right center; right: 12px; }
+QToolButton[role="modelChip"]::menu-indicator { image: none; width: 0px; }

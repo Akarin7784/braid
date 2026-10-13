@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QPushButton, QWidget
@@ -11,7 +13,7 @@ GLYPH = 16
 
 
 class IconButton(QPushButton):
-    """kind: "sidebar"（三横线）或 "panel"（右半实心的面板框）。"""
+    """kind: "sidebar"（三横线）、"panel"（右半实心的面板框）或 "gear"（齿轮）。"""
 
     def __init__(self, kind: str, parent: QWidget | None = None) -> None:
         super().__init__("", parent)
@@ -38,6 +40,17 @@ class IconButton(QPushButton):
             for dy in (-4.0, 0.0, 4.0):
                 y = r.center().y() + dy
                 p.drawLine(QPointF(r.left() + 2, y), QPointF(r.right() - 2, y))
+        elif self.kind == "gear":
+            c = r.center()
+            p.drawEllipse(c, 2.5, 2.5)
+            p.drawEllipse(c, 5.5, 5.5)
+            for i in range(8):
+                a = math.pi / 4 * i
+                dx, dy = math.cos(a), math.sin(a)
+                p.drawLine(
+                    QPointF(c.x() + dx * 5.5, c.y() + dy * 5.5),
+                    QPointF(c.x() + dx * 7.5, c.y() + dy * 7.5),
+                )
         else:
             box = r.adjusted(1.5, 2.5, -1.5, -2.5)
             p.drawRoundedRect(box, 2, 2)

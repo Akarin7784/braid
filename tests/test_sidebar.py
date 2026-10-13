@@ -266,3 +266,20 @@ def test_sidebar_persists_pin_and_delete(qtbot, tmp_path):
     assert sid in sb2.pinned
     groups = SessionStore(path).grouped()
     assert sum(len(r) for _, r in groups) == len(sb2.sessions)
+
+
+def test_settings_entry_switches_center(win, qtbot):
+    from braid.ui.settings_page import SettingsPage
+
+    win.show()
+    qtbot.waitExposed(win)
+    assert not win.settings_open()
+    win.sidebar.settings_btn.click()
+    assert win.settings_open()
+    assert isinstance(win.settings_page, SettingsPage) and win.chat_view.isHidden()
+    assert win.title.text() == "设置"
+    win.sidebar.settings_btn.click()
+    assert not win.settings_open()
+    win.show_settings(True)
+    win.sidebar.select(win.sidebar.sessions[1].id)
+    assert not win.settings_open() and win.chat_view.isVisible()

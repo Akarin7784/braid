@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         self.sidebar = sidebar = Sidebar(backend, store=SessionStore())
         sidebar.layout().insertWidget(0, DragArea(minimumHeight=24))  # type: ignore[union-attr]
         sidebar.sessionSelected.connect(self._open_session)
+        sidebar.settingsRequested.connect(lambda: self.show_settings(not self.settings_open()))
         self._sessions = sidebar.sessions
 
         chat = QFrame()
@@ -96,6 +97,9 @@ class MainWindow(QMainWindow):
         cl.addWidget(bar)
         self.chat_view = ChatView()
         cl.addWidget(self.chat_view, 1)
+        # 设置页与对话同处中栏：打开时隐藏消息区和输入框（首次打开时创建）
+        self.settings_page: QWidget | None = None
+        self._center_layout = cl
         models = backend.list_models()
         self.composer = composer = Composer(models)
         self.chat = ChatController(backend, self.chat_view, composer.model_id)
@@ -156,7 +160,28 @@ class MainWindow(QMainWindow):
     def _open(self, row: int) -> None:
         self.sidebar.select(self._sessions[row].id)
 
+    def settings_open(self) -> bool:
+        return self.settings_page is not None and not self.settings_page.isHidden()
+
+    def show_settings(self, on: bool = True) -> None:
+        if on and self.settings_page is None:
+            from braid.ui.settings_page import SettingsPage
+
+            self.settings_page = SettingsPage()
+            self._center_layout.insertWidget(
+                self._center_layout.indexOf(self.chat_view), self.settings_page, 1
+            )
+        if self.settings_page is not None:
+            self.settings_page.setVisible(on)
+        self.chat_view.setVisible(not on)
+        self.composer.setVisible(not on)
+        if on:
+            self.title.setText("设置")
+        elif (cur := getattr(self, "_current", None)) is not None:
+            self.title.setText(cur.title)
+
     def _open_session(self, s: Session) -> None:
+        self.show_settings(False)
         self.title.setText(s.title)
         self.chat.open_session(s.id)
         self._current = s

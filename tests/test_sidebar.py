@@ -1,6 +1,7 @@
 """侧边栏与浮层窗口控制按钮。"""
 
 import pytest
+from PySide6.QtWidgets import QApplication
 
 from braid.backends.mock import MockBackend
 from braid.ui.main_window import MainWindow
@@ -185,3 +186,20 @@ def test_window_control_properties_and_qss_hover(win, qtbot):
         assert close.palette().buttonText().color() == normal
     finally:
         QApplication.instance().setStyleSheet("")
+
+
+def test_panel_toggle_aligns_right(qtbot) -> None:
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(1200, 760)
+    w.show()
+    t = w.panel_toggle
+    chat = w.chat_view.parentWidget()
+    w.set_panel_open(True, animate=False)
+    QApplication.processEvents()
+    right = t.mapTo(w, t.rect().topLeft()).x() + t.width()
+    assert chat.mapTo(w, chat.rect().topLeft()).x() + chat.width() - right == 16
+    w.set_panel_open(False, animate=False)
+    QApplication.processEvents()
+    right = t.mapTo(w, t.rect().topLeft()).x() + t.width()
+    assert w.controls.x() - right == 8

@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
 
 from braid.core.browser import BrowserController
 from braid.theme.menu import is_dark
+from braid.theme.palette import qcolor
 from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
 
@@ -104,10 +105,10 @@ def load_webengine() -> QWidget | None:
         return None
 
 
-def _c(hex_: str, alpha_mul: float = 1.0) -> QColor:
-    c = QColor(hex_[:7])
-    a = int(hex_[7:], 16) if len(hex_) == 9 else 255
-    c.setAlpha(int(a * alpha_mul))
+def _sel(dark: bool, mul: float = 1.0) -> QColor:
+    """sel token（自带透明度），可再按 ``mul`` 衰减。"""
+    c = qcolor("sel", dark)
+    c.setAlphaF(c.alphaF() * mul)
     return c
 
 
@@ -155,14 +156,14 @@ class BreathingDot(QWidget):
     phase = Property(float, _get, _set)
 
     def paintEvent(self, e: QPaintEvent) -> None:
-        t = palette(is_dark())
+        dark = is_dark()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
         c = QRectF(self.rect()).center()
-        p.setBrush(_c(t["sel"], 0.5 + 0.5 * self._phase))
+        p.setBrush(_sel(dark, 0.5 + 0.5 * self._phase))
         p.drawEllipse(c, 8.0, 8.0)  # 4px 光晕（半径 4+4）
-        p.setBrush(QColor(t["brand"]))
+        p.setBrush(qcolor("brand", dark))
         p.drawEllipse(c, 4.0, 4.0)
         p.end()
 
@@ -259,18 +260,18 @@ class ClickHighlight(QWidget):
     def paintEvent(self, e: QPaintEvent) -> None:
         if self._opacity <= 0:
             return
-        t = palette(is_dark())
+        dark = is_dark()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.point_mode:
             c = QPointF(self.target.topLeft())
             p.setOpacity(self._opacity)
-            p.setPen(QPen(QColor(t["brand"]), 1.5))
-            p.setBrush(_c(t["sel"]))
+            p.setPen(QPen(qcolor("brand", dark), 1.5))
+            p.setBrush(_sel(dark))
             rad = self.ripple_diameter() / 2
             p.drawEllipse(c, rad, rad)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(t["brand"]))
+            p.setBrush(qcolor("brand", dark))
             p.drawEllipse(c, DOT_D / 2, DOT_D / 2)
             p.end()
             return
@@ -283,15 +284,15 @@ class ClickHighlight(QWidget):
         halo.addRoundedRect(r.adjusted(-self.HALO, -self.HALO, self.HALO, self.HALO), 18, 18)
         inner = QPainterPath()
         inner.addRoundedRect(r, 12, 12)
-        p.fillPath(halo.subtracted(inner), _c(t["sel"]))
-        p.setPen(QPen(QColor(t["brand"]), 2))
+        p.fillPath(halo.subtracted(inner), _sel(dark))
+        p.setPen(QPen(qcolor("brand", dark), 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(r, 12, 12)
         if self.label:
             f = QFont()
             f.setPixelSize(11)
             p.setFont(f)
-            p.setPen(QColor(t["brand"]))
+            p.setPen(qcolor("brand", dark))
             p.drawText(QRectF(r.left(), r.bottom() + self.HALO, 400, 16), self.label)
         p.end()
 
@@ -319,7 +320,7 @@ class CornerMask(QWidget):
 
     def fill_brush(self) -> QLinearGradient:
         """面板底色 pn_a→pn_b 横向渐变，按所在右栏的坐标映射。"""
-        t = palette(is_dark())
+        dark = is_dark()
         panel = self.parentWidget()
         while panel is not None and panel.objectName() != "RightPanel":
             panel = panel.parentWidget()
@@ -329,8 +330,8 @@ class CornerMask(QWidget):
             x0 = float(self.mapFrom(panel, QPoint(0, 0)).x())
             x1 = x0 + panel.width()
         g = QLinearGradient(x0, 0, x1, 0)
-        g.setColorAt(0, QColor(t["pn_a"]))
-        g.setColorAt(1, QColor(t["pn_b"]))
+        g.setColorAt(0, qcolor("pn_a", dark))
+        g.setColorAt(1, qcolor("pn_b", dark))
         return g
 
     def corner_path(self) -> QPainterPath:

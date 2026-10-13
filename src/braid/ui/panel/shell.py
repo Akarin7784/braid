@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -32,6 +32,16 @@ TAB_ROW_H, TAB_H = 44, 28
 TAB_NAMES = ("浏览器", "Git", "产物")
 BROWSER_TAB, GIT_TAB, ARTIFACTS_TAB = 0, 1, 2
 DEFAULT_TAB = ARTIFACTS_TAB  # 默认不落在浏览器，避免冷启动加载 WebEngine
+
+
+def splitter_min_width(w: QWidget | None) -> int:
+    """QSplitter 实际采用的最小宽度。
+
+    同 qSmartMinSize：显式 minimumWidth 优先，否则 minimumSizeHint。
+    """
+    if w is None:
+        return 0
+    return w.minimumWidth() or max(0, w.minimumSizeHint().width())
 
 
 def clamp_width(w: int) -> int:
@@ -161,6 +171,7 @@ class RightPanel(QFrame):
 
             mode = "dark" if is_dark() else "light"
         self.setObjectName("RightPanel")
+        self._pending_width: int | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(panel_qss(mode))
         # 不设最小宽度：主窗口收起/展开动画需要把宽度压到 0；拖动范围由 ResizeGrip 钳制
@@ -298,16 +309,44 @@ class RightPanel(QFrame):
             self.stack.setCurrentIndex(index)
             self.currentChanged.emit(index)
 
-    def set_panel_width(self, w: int) -> int:
-        """设置右栏宽度（钳制到 320–720）。在 QSplitter 中时调整分割尺寸，中栏吸收差值。"""
-        w = clamp_width(w)
+    def _split_slot(self) -> tuple[QSplitter, int, int] | None:
+        """所在 QSplitter、本面板下标、让出/吸收宽度的相邻栏（中栏）下标。"""
         split = self.parentWidget()
-        if isinstance(split, QSplitter) and (i := split.indexOf(self)) >= 0:
+        if isinstance(split, QSplitter) and (i := split.indexOf(self)) >= 0 and split.count() > 1:
+            return split, i, (i - 1 if i > 0 else i + 1)
+        return None
+
+    def width_range(self) -> tuple[int, int]:
+        """当前可设置的宽度区间：320–720，且不能把中栏挤到其最小宽度以下。"""
+        slot = self._split_slot()
+        if slot is None:
+            return MIN_WIDTH, MAX_WIDTH
+        split, i, j = slot
+        sizes = split.sizes()
+        if sum(sizes) <= 0:  # 尚未布局，等应用时再按实际尺寸钳制
+            return MIN_WIDTH, MAX_WIDTH
+        room = max(0, sizes[j] - splitter_min_width(split.widget(j)))
+        hi = max(MIN_WIDTH, min(MAX_WIDTH, sizes[i] + room))
+        return MIN_WIDTH, hi
+
+    def set_panel_width(self, w: int) -> int:
+        """设置右栏宽度（钳制到 :meth:`width_range`）。在 QSplitter 中只与中栏互换宽度，
+        保持各栏总和不变——总和不一致或挤破相邻栏最小宽度时，QSplitter 会按比例重排，
+        宽度就会偏离请求值（Windows CI 上 520→548、320→448 即此原因）。
+        分割器尚未布局（sizes 全 0）时先记下，待布局后再应用。"""
+        lo, hi = self.width_range()
+        w = max(lo, min(hi, int(w)))
+        slot = self._split_slot()
+        if slot is not None:
+            split, i, j = slot
             sizes = split.sizes()
+            if sum(sizes) <= 0:
+                self._pending_width = w
+                return w
+            self._pending_width = None
             delta = w - sizes[i]
-            j = i - 1 if i > 0 else i + 1
             sizes[i] = w
-            sizes[j] = max(1, sizes[j] - delta)
+            sizes[j] -= delta
             split.setSizes(sizes)
         else:
             self.resize(w, self.height())
@@ -316,5 +355,9 @@ class RightPanel(QFrame):
 
     def resizeEvent(self, e: QResizeEvent) -> None:
         super().resizeEvent(e)
+        if (pw := self._pending_width) is not None and self._split_slot():
+            # 分割器正在布局中，下一轮事件循环再设，避免被本轮布局覆盖
+            self._pending_width = None
+            QTimer.singleShot(0, lambda: self.set_panel_width(pw))
         self.grip.setGeometry(0, 0, self.grip.width(), self.height())
         self.grip.raise_()

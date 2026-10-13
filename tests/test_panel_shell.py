@@ -8,7 +8,15 @@ from PySide6.QtWidgets import QApplication
 
 from braid.theme.palette import tokens as _pal
 from braid.ui.panel import RightPanel
-from braid.ui.panel.shell import MAX_WIDTH, MIN_WIDTH, TAB_H, TAB_NAMES, TAB_ROW_H, clamp_width
+from braid.ui.panel.shell import (
+    MAX_WIDTH,
+    MIN_WIDTH,
+    TAB_H,
+    TAB_NAMES,
+    TAB_ROW_H,
+    PanelSplitter,
+    clamp_width,
+)
 
 
 def tokens(mode):
@@ -114,6 +122,9 @@ def _main_window(qtbot):
     qtbot.addWidget(w)
     w.resize(1280, 800)
     w.show()
+    qtbot.waitExposed(w)
+    # 真实平台（Windows）上 show/resize 是异步的，等分割器完成布局再断言
+    qtbot.waitUntil(lambda: sum(w.splitter.sizes()) > 0 and w.panel.width() > 0)
     QApplication.processEvents()
     return w
 
@@ -130,20 +141,63 @@ def test_no_divider_between_chat_and_panel(qtbot):
 
 
 def test_main_window_grip_drag_clamped(qtbot):
+    """不写死像素：期望值由实际分割器尺寸、中栏最小宽度和 320–720 推出。"""
+    from braid.ui.panel.shell import splitter_min_width
+
     w = _main_window(qtbot)
-    w.resize(1800, 800)
+    w.resize(1800, 800)  # 屏幕更小时窗口达不到也没关系
+    QApplication.processEvents()
+    p, split = w.panel, w.splitter
+    chat = split.widget(split.indexOf(p) - 1)
+    total = sum(split.sizes())
+
+    def settle():
+        QApplication.processEvents()
+        assert sum(split.sizes()) == total  # 只在中栏与右栏之间互换
+        assert chat.width() >= splitter_min_width(chat)  # 中栏不被挤破
+
+    start, right = p.width(), p.geometry().right()
+    lo, hi = p.width_range()
+    assert (lo, hi) == (MIN_WIDTH, min(MAX_WIDTH, start + chat.width() - splitter_min_width(chat)))
+    _drag(p.grip, -100)
+    settle()
+    assert p.width() == min(start + 100, hi) and p.geometry().right() == right
+    _drag(p.grip, -5000)
+    settle()
+    assert p.width() == hi <= MAX_WIDTH
+    _drag(p.grip, 5000)
+    settle()
+    assert p.width() == MIN_WIDTH
+
+
+def test_narrow_window_clamps_to_chat_min(qtbot):
+    from braid.ui.panel.shell import splitter_min_width
+
+    w = _main_window(qtbot)
+    w.resize(w.minimumWidth(), 700)
     QApplication.processEvents()
     p = w.panel
-    right = p.geometry().right()
-    _drag(p.grip, -100)
+    chat = w.splitter.widget(w.splitter.indexOf(p) - 1)
+    p.set_panel_width(MAX_WIDTH)
     QApplication.processEvents()
-    assert p.width() == 520 and p.geometry().right() == right
-    _drag(p.grip, -2000)
-    QApplication.processEvents()
-    assert p.width() == MAX_WIDTH
-    _drag(p.grip, 3000)
-    QApplication.processEvents()
-    assert p.width() == MIN_WIDTH
+    assert chat.width() >= splitter_min_width(chat)
+    assert MIN_WIDTH <= p.width() == p.width_range()[1] <= MAX_WIDTH
+
+
+def test_set_width_before_layout_is_applied_later(qtbot):
+    from PySide6.QtWidgets import QWidget
+
+    split = PanelSplitter()
+    qtbot.addWidget(split)
+    split.addWidget(QWidget())
+    p = RightPanel()
+    split.addWidget(p)
+    assert sum(split.sizes()) == 0
+    p.set_panel_width(500)  # 尚未布局：记下待应用
+    split.resize(1400, 600)
+    split.show()
+    qtbot.waitExposed(split)
+    qtbot.waitUntil(lambda: p.width() == 500)
 
 
 def test_trailing_widget(qtbot):
@@ -202,6 +256,12 @@ def test_controls_never_cover_last_tab(qtbot):
     QApplication.processEvents()
     w._place_controls()
     assert w.panel.width() == MIN_WIDTH and _gap(w) >= 16
+    # 最窄面板时：标签宽 + 两侧留空必须放得下（与平台字体/缩放无关）
+    from braid.ui.window_controls import WindowControls
+
+    last = w.panel.tabs[-1]
+    used = last.mapTo(w.panel, last.rect().topRight()).x() + 1
+    assert used + WindowControls.reserved_width() + 16 <= w.panel.width()
     w.set_panel_open(False, animate=False)
     w.set_panel_open(True, animate=False)
     QApplication.processEvents()

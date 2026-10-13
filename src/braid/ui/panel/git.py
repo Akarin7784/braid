@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from braid.core.git import DiffLine, FileChange, GitSource
 from braid.theme.menu import RoundedMenu, is_dark
+from braid.theme.palette import qcolor
 from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
 
@@ -41,13 +42,11 @@ ARROW_PX = 12
 CONT_MARK = "↪"
 
 
-def qcolor(hex_: str) -> QColor:
-    """tokens 的 #RRGGBBAA → QColor。"""
-    if len(hex_) == 9:
-        c = QColor(hex_[:7])
-        c.setAlpha(int(hex_[7:], 16))
-        return c
-    return QColor(hex_)
+def tinted(name: str, dark: bool, alpha: int) -> QColor:
+    """token 色叠指定透明度（diff 加/删行底：success 12–15%、danger 10–15%）。"""
+    c = qcolor(name, dark)
+    c.setAlpha(alpha)
+    return c
 
 
 def mono_font(px: int = DIFF_FONT_PX) -> QFont:
@@ -143,7 +142,7 @@ class Spinner(QWidget):
         self.hide()
 
     def color(self) -> QColor:
-        return QColor(palette(is_dark())["text2"])
+        return qcolor("text2", is_dark())
 
     def paintEvent(self, e: QPaintEvent) -> None:
         p = QPainter(self)
@@ -191,10 +190,10 @@ class SyncButton(QPushButton):
         self.refresh_icon()
 
     def text_color(self) -> QColor:
-        t = palette(is_dark())
+        dark = is_dark()
         if not self.isEnabled():
-            return QColor(t["text3"])
-        return QColor(t["brand"] if self.property("emphasis") else t["text"])
+            return qcolor("text3", dark)
+        return qcolor("brand" if self.property("emphasis") else "text", dark)
 
     def refresh_icon(self) -> None:
         if self.busy:
@@ -246,7 +245,7 @@ class StageToggle(QPushButton):
         super().paintEvent(e)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(palette(is_dark())["text2"]), 1.5)
+        pen = QPen(qcolor("text2", is_dark()), 1.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         c = QRectF(self.rect()).center()
@@ -355,10 +354,9 @@ class DiffView(QWidget):
 
     def paintEvent(self, e: QPaintEvent) -> None:
         dark = is_dark()
-        t = palette(dark)
         bg = {
-            "add": qcolor("#5CC28A26" if dark else "#2E8B571F"),
-            "del": qcolor("#E2685B26" if dark else "#C0392B1A"),
+            "add": tinted("success", dark, 0x26 if dark else 0x1F),
+            "del": tinted("danger", dark, 0x26 if dark else 0x1A),
         }
         left = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         p = QPainter(self)
@@ -368,11 +366,11 @@ class DiffView(QWidget):
             r = self.line_rect(r_i)
             if ln.kind in bg:
                 p.fillRect(r, bg[ln.kind])
-            p.setPen(QColor(t["text3"]))
+            p.setPen(qcolor("text3", dark))
             p.drawText(
                 QRect(4, r.y(), LINENO_W, DIFF_LINE_H), left, CONT_MARK if cont else str(ln.lineno)
             )
-            p.setPen(QColor(t["text"]))
+            p.setPen(qcolor("text", dark))
             p.drawText(QRect(self.TEXT_X, r.y(), r.width(), DIFF_LINE_H), left, seg)
         p.end()
 

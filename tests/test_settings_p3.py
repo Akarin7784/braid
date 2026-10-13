@@ -531,23 +531,28 @@ def test_reset_dialog_checkmark_on_danger(qtbot):
     cb.initStyleOption(opt)
     box = cb.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, cb)
     white = QColor(tokens(False)["on_danger"])
+    danger = QColor(tokens(False)["danger"])
 
-    def white_px() -> int:
+    def count_near(color: QColor, tol: int = 12) -> int:
         img = cb.grab().toImage()
         dpr = img.devicePixelRatio()
         n = 0
-        for x in range(int(box.left() * dpr), int((box.right() + 1) * dpr)):
-            for y in range(int(box.top() * dpr), int((box.bottom() + 1) * dpr)):
-                c = img.pixelColor(x, y)
-                # ✓ 有抗锯齿：取接近 on_danger 的像素（未勾选底色 check=#E3E3E2 不会命中）
+        # 只看指示框中心，避开边框抗锯齿（HiDPI 下边框会掺出近白像素）
+        cx = (box.left() + box.right()) / 2
+        cy = (box.top() + box.bottom()) / 2
+        for dx in range(-4, 5):
+            for dy in range(-4, 5):
+                c = img.pixelColor(int((cx + dx) * dpr), int((cy + dy) * dpr))
                 if (
-                    min(abs(c.red() - white.red()), 255) <= 10
-                    and abs(c.green() - white.green()) <= 10
+                    abs(c.red() - color.red()) <= tol
+                    and abs(c.green() - color.green()) <= tol
+                    and abs(c.blue() - color.blue()) <= tol
                 ):
                     n += 1
         return n
 
-    assert white_px() == 0
+    assert count_near(white) == 0  # 未勾选：中心没有 on_danger
     cb.setChecked(True)
-    assert white_px() > 0
+    assert count_near(danger) > 0  # 勾选：指示框底是 danger
+    assert count_near(white) > 0  # 勾选：中心有 ✓ 的 on_danger 像素
     dlg.reject()

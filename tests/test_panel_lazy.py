@@ -14,7 +14,7 @@ from braid.ui.panel.shell import ARTIFACTS_TAB, BROWSER_TAB, GIT_TAB
 def git_calls(monkeypatch):
     """统计对仓库的查询（真实实现里即 git 子进程调用）。"""
     calls: list[str] = []
-    for name in ("status", "diff", "branches"):
+    for name in ("status", "diff"):
         orig = getattr(MockGitSource, name)
 
         def wrapped(self, *a, _orig=orig, _n=name, **k):

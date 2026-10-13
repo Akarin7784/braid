@@ -1,4 +1,4 @@
-"""Git 抽象接口：右栏 Git 页只通过 GitSource 读写仓库状态。"""
+"""Git 只读接口：右栏 Git 页只通过 GitSource 读取仓库状态与 diff，不做任何写操作。"""
 
 from __future__ import annotations
 
@@ -38,43 +38,16 @@ class DiffLine:
 @dataclass
 class GitStatus:
     branch: str
-    ahead: int = 0
-    behind: int = 0
-    staged: list[FileChange] = field(default_factory=list)
-    unstaged: list[FileChange] = field(default_factory=list)
+    files: list[FileChange] = field(default_factory=list)  # 工作区相对 HEAD 的改动
 
 
 class GitSource(QObject):
-    """仓库状态来源。实现方在状态变化时发 ``changed``；
-    Pull/Push 是异步操作，开始/结束时发 ``busyChanged(op, busy)``，失败发 ``error``。"""
+    """只读的仓库状态来源。状态变化时发 ``changed``。"""
 
     changed = Signal()
-    busyChanged = Signal(str, bool)  # op: "pull" | "push"
-    error = Signal(str)
 
     @abstractmethod
     def status(self) -> GitStatus: ...
 
     @abstractmethod
-    def diff(self, path: str, staged: bool) -> list[DiffLine]: ...
-
-    @abstractmethod
-    def branches(self) -> list[str]: ...
-
-    @abstractmethod
-    def checkout(self, branch: str) -> None: ...
-
-    @abstractmethod
-    def stage(self, path: str) -> None: ...
-
-    @abstractmethod
-    def unstage(self, path: str) -> None: ...
-
-    @abstractmethod
-    def commit(self, message: str) -> None: ...
-
-    @abstractmethod
-    def pull(self) -> None: ...
-
-    @abstractmethod
-    def push(self) -> None: ...
+    def diff(self, path: str) -> list[DiffLine]: ...

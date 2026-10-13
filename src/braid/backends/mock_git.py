@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
-
 from braid.core.git import DiffLine, FileChange, GitSource, GitStatus
 
 BIG_FILE = "src/data/fixtures.json"
@@ -108,87 +106,21 @@ def _stat(fc: FileChange) -> FileChange:
 
 
 class MockGitSource(GitSource):
-    def __init__(self, op_ms: int = 400) -> None:
+    """只读示例仓库。"""
+
+    def __init__(self) -> None:
         super().__init__()
-        self.op_ms = op_ms
-        self._branch = "feat/login"
-        self._branches = ["main", "feat/login", "design/menu-style"]
-        self.ahead, self.behind = 1, 0
-        self._staged = [FileChange("src/pages/forgot.py", "A")]
-        self._unstaged = [
+        self.branch = "feat/login"
+        self.files = [
+            FileChange("src/pages/forgot.py", "A"),
             FileChange("src/pages/login.py", "M"),
             FileChange("src/styles/login.qss", "M"),
             FileChange("src/old_auth.py", "D"),
             FileChange(BIG_FILE, "A"),
         ]
-        self.commits: list[str] = []
-        self._busy: set[str] = set()
 
     def status(self) -> GitStatus:
-        return GitStatus(
-            self._branch,
-            self.ahead,
-            self.behind,
-            [_stat(f) for f in self._staged],
-            [_stat(f) for f in self._unstaged],
-        )
+        return GitStatus(self.branch, [_stat(f) for f in self.files])
 
-    def diff(self, path: str, staged: bool) -> list[DiffLine]:
+    def diff(self, path: str) -> list[DiffLine]:
         return list(_DIFFS.get(path, []))
-
-    def branches(self) -> list[str]:
-        return list(self._branches)
-
-    def checkout(self, branch: str) -> None:
-        if branch in self._branches and branch != self._branch:
-            self._branch = branch
-            self.changed.emit()
-
-    def _move(self, path: str, src: list[FileChange], dst: list[FileChange]) -> None:
-        for f in src:
-            if f.path == path:
-                src.remove(f)
-                dst.append(f)
-                self.changed.emit()
-                return
-
-    def stage(self, path: str) -> None:
-        self._move(path, self._unstaged, self._staged)
-
-    def unstage(self, path: str) -> None:
-        self._move(path, self._staged, self._unstaged)
-
-    def commit(self, message: str) -> None:
-        if not message.strip() or not self._staged:
-            self.error.emit("没有可提交的内容")
-            return
-        self.commits.append(message.strip())
-        self._staged.clear()
-        self.ahead += 1
-        self.changed.emit()
-
-    def _run(self, op: str, done: object) -> None:
-        if op in self._busy:
-            return
-        self._busy.add(op)
-        self.busyChanged.emit(op, True)
-
-        def finish() -> None:
-            self._busy.discard(op)
-            done()  # type: ignore[operator]
-            self.busyChanged.emit(op, False)
-            self.changed.emit()
-
-        QTimer.singleShot(self.op_ms, finish)
-
-    def pull(self) -> None:
-        def done() -> None:
-            self.behind = 0
-
-        self._run("pull", done)
-
-    def push(self) -> None:
-        def done() -> None:
-            self.ahead = 0
-
-        self._run("push", done)

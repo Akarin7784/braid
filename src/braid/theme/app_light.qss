@@ -112,3 +112,8 @@ QMenu::section { color: #9E9E9B; font-size: 12px; padding: 8px 12px 4px 12px; }
 QToolButton[role="modelChip"] { background: #F0F0EF; border-radius: 12px; padding: 4px 34px 4px 12px; font-size: 12px; }
 QToolButton[role="modelChip"]:hover, QToolButton[role="modelChip"][popupOpen="true"] { background: #ECECEB; }
 QToolButton[role="modelChip"]::menu-indicator { image: none; width: 0px; }
+
+/* 窗口控制按钮（浮层，右上角）：28×28。悬停时代码设 hovered=true 并 repolish，图标色从 palette().buttonText() 读 */
+QToolButton[role="windowControl"] { background: transparent; border: none; border-radius: 8px; color: #6B6B69; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0; }
+QToolButton[role="windowControl"]:hover, QToolButton[role="windowControl"][hovered="true"] { background: #ECECEB; }
+QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowControl"][kind="close"][hovered="true"] { background: #E5484D; color: #FFFFFF; }

@@ -31,13 +31,59 @@ class Session:
     reasoning: str | None = None
 
 
+@dataclass(frozen=True)
+class EffortOption:
+    """一个推理强度档位：id 存进会话与设置，label / description 原样显示在模型菜单里。"""
+
+    id: str
+    label: str
+    description: str = ""
+
+
+# 旧接口只给 reasoning_levels（档位 id）时的兜底文案；新后端应直接给 efforts
+LEGACY_EFFORTS: dict[str, EffortOption] = {
+    "low": EffortOption("low", "低", "思考更少，回复更快"),
+    "medium": EffortOption("medium", "中", "速度与质量兼顾"),
+    "high": EffortOption("high", "高", "思考更多，适合难题"),
+    "max": EffortOption("max", "最高", "思考最充分，耗时最长"),
+}
+
+
 @dataclass
 class ModelInfo:
+    """模型菜单的全部数据都来自这里，界面不写死任何模型或档位文案。
+
+    - group：菜单分组标题（如服务商名），空则回退到 provider，再空不分组标题；
+    - tier：右侧小标签（如 高 / 中 / 低），空则不显示；
+    - description：第二行一句话说明，空则不显示；
+    - efforts：推理强度档位（从低到高），空表示不支持，菜单不出子菜单、按钮只显示模型名。
+
+    兼容旧调用：位置参数顺序不变；只给 reasoning_levels 时按 LEGACY_EFFORTS 补齐 efforts，
+    只给 efforts 时 reasoning_levels 自动等于各档 id。
+    """
+
     id: str
     name: str
     provider: str = ""
-    # 支持的推理强度档位，按从低到高排列；空表示不支持推理强度
     reasoning_levels: tuple[str, ...] = ()
+    description: str = ""
+    tier: str = ""
+    group: str = ""
+    efforts: tuple[EffortOption, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.efforts:
+            self.efforts = tuple(self.efforts)
+            self.reasoning_levels = tuple(e.id for e in self.efforts)
+        elif self.reasoning_levels:
+            self.efforts = tuple(
+                LEGACY_EFFORTS.get(lv, EffortOption(lv, lv)) for lv in self.reasoning_levels
+            )
+        if not self.group:
+            self.group = self.provider
+
+    def effort(self, effort_id: str) -> EffortOption | None:
+        return next((e for e in self.efforts if e.id == effort_id), None)
 
 
 @dataclass
@@ -72,6 +118,14 @@ class ConnectionResult:
 
 
 class AgentBackend(ABC):
+    """界面只通过这个接口和 Agent 核心打交道。
+
+    推理强度（effort）约定：类型是 ``str | None``。
+    - 字符串：``ModelInfo.efforts`` 里某一档的 ``id``，如 ``"medium"``；
+    - ``None``：不指定，由后端按该模型的默认行为处理（模型不支持推理强度时界面总是传 None）。
+    不再使用空串表示“没有档位”。
+    """
+
     _bus: ConfigBus | None = None
 
     @property
@@ -119,9 +173,12 @@ class AgentBackend(ABC):
         session_id: str,
         text: str,
         model: str,
-        reasoning: str = "medium",
+        reasoning: str | None = None,
         attachments: list[str] | None = None,
-    ) -> Iterator[StreamChunk]: ...
+    ) -> Iterator[StreamChunk]:
+        """发送一条消息并流式返回。``reasoning`` 是推理强度档位 id；None 表示用模型默认。"""
+        ...
+
     @abstractmethod
     def respond_permission(
         self, request_id: str, decision: Literal["once", "always", "deny"]

@@ -18,7 +18,7 @@ class ChatController(QObject):
         super().__init__(view)
         self.backend, self.view, self.model_id = backend, view, model
         self.session_id: str | None = None
-        self.reasoning = ""
+        self.reasoning: str | None = None  # None：用模型默认
         self._it: Iterator[StreamChunk] | None = None
         # 后端是同步生成器：用 0ms 定时器分片拉取，不阻塞 UI；真实后端可换成线程/asyncio。
         self._pump = QTimer(self, interval=0)
@@ -46,7 +46,8 @@ class ChatController(QObject):
     def _start(self, text: str, row: int) -> None:
         assert self.session_id is not None
         self._it = iter(
-            self.backend.send(self.session_id, text, self.model_id, self.reasoning or "medium")
+            # 档位 id 来自后端的 ModelInfo.efforts；None 表示用模型默认
+            self.backend.send(self.session_id, text, self.model_id, self.reasoning)
         )
         self.view.stream.start(row)
         self._pump.start()

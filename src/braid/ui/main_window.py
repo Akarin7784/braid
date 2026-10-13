@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6 import QtGui
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QObject,
     QPoint,
+    QPointF,
     QRectF,
     Qt,
     QTimer,
     QVariantAnimation,
 )
-from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
+from PySide6.QtGui import QCursor, QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -34,6 +36,7 @@ from braid.core.backend import AgentBackend, Session
 from braid.core.session_store import SessionStore
 from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
+from braid.ui.chat_view import MAX_WIDTH as CHAT_MAX_W
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
 from braid.ui.gl_prewarm import prewarm_gl_surface
@@ -56,6 +59,103 @@ class DragArea(QWidget):
     def mouseDoubleClickEvent(self, e: QMouseEvent) -> None:
         w = self.window()
         w.showNormal() if w.isMaximized() else w.showMaximized()
+
+
+RESIZE_MARGIN = 6  # 无边框窗口四边 / 四角的拖拽调整大小命中宽度（逻辑像素）
+COMPOSER_MAX_W = CHAT_MAX_W  # 输入框与消息列同宽（单一来源 chat_view.MAX_WIDTH），宽窗口下居中
+
+_E = Qt.Edge
+_CURSORS: dict[int, Qt.CursorShape] = {
+    int(_E.LeftEdge.value): Qt.CursorShape.SizeHorCursor,
+    int(_E.RightEdge.value): Qt.CursorShape.SizeHorCursor,
+    int(_E.TopEdge.value): Qt.CursorShape.SizeVerCursor,
+    int(_E.BottomEdge.value): Qt.CursorShape.SizeVerCursor,
+    int(_E.TopEdge.value | _E.LeftEdge.value): Qt.CursorShape.SizeFDiagCursor,
+    int(_E.BottomEdge.value | _E.RightEdge.value): Qt.CursorShape.SizeFDiagCursor,
+    int(_E.TopEdge.value | _E.RightEdge.value): Qt.CursorShape.SizeBDiagCursor,
+    int(_E.BottomEdge.value | _E.LeftEdge.value): Qt.CursorShape.SizeBDiagCursor,
+}
+
+
+def resize_edges(pos: QPointF, width: int, height: int, margin: int = RESIZE_MARGIN) -> int:
+    """窗口内坐标 → 命中的边（Qt.Edge 位或的整数值）；0 表示不在边缘。"""
+    x, y = pos.x(), pos.y()
+    if x < 0 or y < 0 or x >= width or y >= height:
+        return 0
+    edges = 0
+    if x < margin:
+        edges |= _E.LeftEdge.value
+    elif x >= width - margin:
+        edges |= _E.RightEdge.value
+    if y < margin:
+        edges |= _E.TopEdge.value
+    elif y >= height - margin:
+        edges |= _E.BottomEdge.value
+    return int(edges)
+
+
+def resize_cursor(edges: int) -> Qt.CursorShape | None:
+    return _CURSORS.get(edges)
+
+
+def _as_edges(edges: int) -> Qt.Edge:
+    out = Qt.Edge(0)
+    for e in (_E.LeftEdge, _E.RightEdge, _E.TopEdge, _E.BottomEdge):
+        if edges & e.value:
+            out |= e
+    return out
+
+
+class EdgeResizer(QObject):
+    """装在主窗口的 QWindow 上：所有鼠标事件（含子控件区域）都先经过它。
+    边缘 6px 内显示调整大小光标，左键按下交给系统 startSystemResize
+    （Windows / macOS / X11 / Wayland 通用）。"""
+
+    def __init__(self, window: QWidget) -> None:
+        super().__init__(window)
+        self.window = window
+        self.cursor_on = False
+
+    def _enabled(self) -> bool:
+        w = self.window
+        return not (w.isMaximized() or w.isFullScreen())
+
+    def edges_at(self, pos: QPointF) -> int:
+        if not self._enabled():
+            return 0
+        return resize_edges(pos, self.window.width(), self.window.height())
+
+    def _set_cursor(self, shape: Qt.CursorShape | None) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        if shape is not None:
+            if self.cursor_on:
+                QApplication.changeOverrideCursor(QCursor(shape))
+            else:
+                QApplication.setOverrideCursor(QCursor(shape))
+                self.cursor_on = True
+        elif self.cursor_on:
+            QApplication.restoreOverrideCursor()
+            self.cursor_on = False
+
+    def eventFilter(self, obj: QObject, e: QEvent) -> bool:  # noqa: N802
+        t = e.type()
+        if t == QEvent.Type.MouseMove and isinstance(e, QMouseEvent):
+            if e.buttons() == Qt.MouseButton.NoButton:
+                self._set_cursor(resize_cursor(self.edges_at(e.position())))
+        elif t == QEvent.Type.MouseButtonPress and isinstance(e, QMouseEvent):
+            edges = self.edges_at(e.position())
+            left = e.button() == Qt.MouseButton.LeftButton
+            if (
+                edges
+                and left
+                and isinstance(obj, QtGui.QWindow)
+                and obj.startSystemResize(_as_edges(edges))
+            ):
+                return True
+        elif t == QEvent.Type.Leave:
+            self._set_cursor(None)
+        return False
 
 
 def _btn(text: str, variant: str) -> QPushButton:
@@ -127,7 +227,14 @@ class MainWindow(QMainWindow):
         self.chat.busyChanged.connect(composer.set_busy)
         composer.selectionChanged.connect(self._remember_selection)
         self.chat.editRequested.connect(composer.set_text)
-        cl.addWidget(composer)
+        # 宽窗口（全屏）下输入框与消息列同宽并水平居中
+        composer.setMaximumWidth(COMPOSER_MAX_W)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addStretch(1)
+        row.addWidget(composer, 100)
+        row.addStretch(1)
+        cl.addLayout(row)
 
         self._gl_prewarm = prewarm_gl_surface(self)
         self.artifact_source = MockArtifactSource()
@@ -166,16 +273,24 @@ class MainWindow(QMainWindow):
         self.shortcuts = ShortcutRegistry(self, backend, self._shortcut_handlers())
         self.shortcuts.bindingsChanged.connect(composer.set_key_bindings)
         composer.set_key_bindings(self.shortcuts.bindings)
-        try:
-            from braid.theme.shadows import apply_shadow
+        from PySide6.QtWidgets import QApplication
 
-            apply_shadow(composer, "e3")
-        except Exception:
-            pass
+        app = QApplication.instance()
+        self._apply_composer_shadow(bool(app.property("braidDark")) if app else False)
+        self.resizer = EdgeResizer(self)
 
         # 首个会话的渲染（Markdown 排版 + Pygments 上色，约 130ms）推到首帧之后；
         # 计时器归窗口所有，窗口先销毁则不会触发。
         QTimer.singleShot(0, self, self.open_initial_session)
+
+    def _apply_composer_shadow(self, dark: bool) -> None:
+        """亮色：0 2px 12px 10% 黑（配 QSS 的 1px border_subtle 描边）；暗色沿用 e3。"""
+        from braid.theme.shadows import apply_shadow, apply_shadow_spec
+
+        if dark:
+            apply_shadow(self.composer, "e3", dark=True)
+        else:
+            apply_shadow_spec(self.composer, blur=12, dy=2, alpha=0.10)
 
     def open_initial_session(self) -> None:
         """选中第一个会话；用户已先打开设置页或选了别的会话则什么也不做。"""
@@ -241,6 +356,7 @@ class MainWindow(QMainWindow):
         dark = apply_theme(mode)
         self.chat_view.set_dark(dark)
         self.panel.set_theme("dark" if dark else "light")
+        self._apply_composer_shadow(dark)
         for w in self.findChildren(QWidget):
             w.update()
 
@@ -253,7 +369,7 @@ class MainWindow(QMainWindow):
             s.model_id or settings.default_model, s.reasoning or settings.default_reasoning
         )
 
-    def _remember_selection(self, model_id: str, reasoning: str) -> None:
+    def _remember_selection(self, model_id: str, reasoning: str | None) -> None:
         s = getattr(self, "_current", None)
         if s is not None:
             s.model_id, s.reasoning = model_id, reasoning
@@ -524,4 +640,8 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, e: QShowEvent) -> None:
         super().showEvent(e)
+        h = self.windowHandle()
+        if h is not None and not getattr(self, "_resizer_installed", False):
+            h.installEventFilter(self.resizer)
+            self._resizer_installed = True
         self._place_controls()

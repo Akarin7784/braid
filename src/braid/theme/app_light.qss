@@ -191,3 +191,17 @@ QDialog#resetDialog QCheckBox::indicator:checked { background: #C0392B; }
 QLabel#keyringStatus { color: #9E9E9B; font-size: 12px; }
 QLabel#keyringStatus[state="ok"] { color: #9E9E9B; }
 QLabel#keyringStatus[state="fail"] { color: #B26A00; }
+
+/* —— v1.4：Windows 真机反馈 7/9/6 —— */
+/* 9 输入框：阴影代替边框（亮色另加 1px border_subtle 描边），最大宽度 760 居中 */
+#Composer { border: 1px solid #E6E6E5; border-radius: 16px; }
+/* 7 底栏图标/文字按钮：平时无底，悬停 hover 浅底，圆角 8 */
+#Composer QToolButton[bar="true"], #Composer QPushButton[bar="true"] { background: transparent; border-radius: 8px; color: #6B6B69; }
+#Composer QToolButton[bar="true"]:hover, #Composer QPushButton[bar="true"]:hover { background: #ECECEB; color: #1F1F1E; }
+/* 6 模型菜单：两行（名称 + text3 12px 说明），选中只靠打勾，灰底只给悬停行 */
+QMenu[role="modelMenu"]::item { padding: 6px 30px 24px 32px; min-width: 230px; font-size: 13px; font-weight: normal; }
+QMenu[role="modelMenu"]::item:checked { background: transparent; font-weight: normal; }
+QMenu[role="modelMenu"]::item:selected, QMenu[role="modelMenu"]::item:checked:selected { background: #ECECEB; }
+QMenu[role="modelMenu"]::item:disabled { background: transparent; font-size: 12px; padding: 8px 12px 3px 12px; min-width: 0; }
+/* 模型菜单：去掉 Qt 原生子菜单箭头，由 ModelMenu 自绘 12px chevron（text3） */
+QMenu[role="modelMenu"]::right-arrow { image: none; width: 0px; height: 0px; }

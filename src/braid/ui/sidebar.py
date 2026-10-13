@@ -12,7 +12,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -60,6 +60,65 @@ def _hover(dark: bool) -> QColor:
     c = _c("row_sel", dark)
     c.setAlphaF(c.alphaF() * 0.6)
     return c
+
+
+LOGO_PATH = "icons/braid_logo.svg"  # UI设计师 的正式图标到了直接覆盖这个文件
+LOGO_PX = 18
+BRAND_PX = 16
+BRAND_MARGIN = 16
+
+
+class BrandHeader(QWidget):
+    """新对话按钮上方的产品标识：18px 图标 + “Braid”
+    （Inter SemiBold 16px，token text），上下各 16px。
+
+    图标按当前主题的 text 色着色，绘制时现取 token，切主题自动跟随。"""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("BrandHeader")
+        self.text = "Braid"
+        from braid.ui.settings.widgets import title_font
+
+        self.setFont(title_font(self.font(), BRAND_PX))
+        from importlib.resources import files
+
+        from PySide6.QtGui import QIcon
+
+        self._icon = QIcon(str(files("braid.assets") / LOGO_PATH))
+        self.setFixedHeight(BRAND_MARGIN * 2 + max(LOGO_PX, self.fontMetrics().height()))
+
+    def logo_pixmap(self, dark: bool) -> QPixmap:
+        dpr = self.devicePixelRatioF()
+        pm = self._icon.pixmap(QSize(LOGO_PX, LOGO_PX), dpr)
+        if pm.isNull():
+            return pm
+        tinted = QPixmap(pm.size())
+        tinted.setDevicePixelRatio(pm.devicePixelRatio())
+        tinted.fill(Qt.GlobalColor.transparent)
+        p = QPainter(tinted)
+        p.drawPixmap(0, 0, pm)
+        # SourceIn：结果 = text 色 × 原像素 alpha，三股线各自的 opacity 原样保留
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        p.fillRect(tinted.rect(), _c("text", dark))
+        p.end()
+        return tinted
+
+    def paintEvent(self, e: object) -> None:  # noqa: N802
+        dark = _dark()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        x = TEXT_X - PAD
+        y = (self.height() - LOGO_PX) // 2
+        pm = self.logo_pixmap(dark)
+        if not pm.isNull():
+            p.drawPixmap(x, y, pm)
+        p.setFont(self.font())
+        p.setPen(_c("text", dark))
+        tr = self.rect().adjusted(x + LOGO_PX + 8, 0, 0, 0)
+        p.drawText(tr, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), self.text)
+        p.end()
 
 
 def _dark() -> bool:
@@ -174,6 +233,8 @@ class Sidebar(QFrame):
         top_box.setContentsMargins(PAD, 0, PAD, 0)
         top_box.setSpacing(6)
         lay.addLayout(top_box)
+        self.brand = BrandHeader()
+        top_box.addWidget(self.brand)
         self.new_btn = QPushButton("＋ 新对话")
         self.new_btn.setProperty("variant", "secondary")
         self.new_btn.setObjectName("NewSession")

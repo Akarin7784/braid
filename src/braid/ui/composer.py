@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from braid.core.backend import ModelInfo
 from braid.core.settings import settings
-from braid.theme.menu import ChipButton, RoundedMenu
+from braid.theme.menu import ChipButton, ModelMenu, RoundedMenu
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,6 @@ DEFAULT_COMMANDS = [
     SlashCommand("help", "查看可用命令"),
 ]
 PERMISSIONS = [("ask", "每次询问"), ("auto-edit", "自动编辑"), ("full", "完全自主")]
-REASONING_LABELS = {"low": "低", "medium": "中", "high": "高", "max": "最高"}
 
 
 class _Input(QTextEdit):
@@ -151,7 +150,7 @@ class Composer(QFrame):
     """发出 `submitted(text, attachments)`、`stopRequested()`、`commandTriggered(name)`。"""
 
     submitted = Signal(str, list)
-    selectionChanged = Signal(str, str)  # model_id, reasoning（不支持时为空串）
+    selectionChanged = Signal(str, object)  # model_id, reasoning: str | None（None=模型默认）
     stopRequested = Signal()
     commandTriggered = Signal(str)
 
@@ -168,7 +167,7 @@ class Composer(QFrame):
         self.busy = False
         self.models = {m.id: m for m in models}
         self.model_id = ""
-        self.reasoning = ""
+        self.reasoning: str | None = None
         self.permission = "ask"
 
         col = QVBoxLayout(self)
@@ -188,6 +187,7 @@ class Composer(QFrame):
         bar.setSpacing(6)
         self.attach_btn = QPushButton("\U0001f4ce")
         self.attach_btn.setProperty("variant", "ghost")
+        self.attach_btn.setProperty("bar", True)
         self.attach_btn.setToolTip("添加附件")
         self.attach_btn.clicked.connect(self._pick_files)
         bar.addWidget(self.attach_btn)
@@ -198,6 +198,7 @@ class Composer(QFrame):
         self.model_chip.setMenu(self.model_menu)
         self.perm_chip = self._menu_chip(PERMISSIONS, self.permission, "permission")
         for c in (self.model_chip, self.perm_chip):
+            c.setProperty("bar", True)  # 底栏按钮：平时无底，悬停才出 hover 底
             bar.addWidget(c)
         self.set_selection(settings.default_model, settings.default_reasoning)
         bar.addStretch(1)
@@ -242,33 +243,36 @@ class Composer(QFrame):
         return chip
 
     # 模型 × 推理强度 两级菜单
-    def _build_model_menu(self, models: list[ModelInfo]) -> RoundedMenu:
-        menu = RoundedMenu(self)
+    def _build_model_menu(self, models: list[ModelInfo]) -> ModelMenu:
+        menu = ModelMenu(self)
         self._model_actions: dict[str, QAction] = {}
         self._level_actions: dict[tuple[str, str], QAction] = {}
         group = QActionGroup(menu)
-        providers: dict[str, list[ModelInfo]] = {}
+        groups: dict[str, list[ModelInfo]] = {}
         for m in models:
-            providers.setdefault(m.provider or "其他", []).append(m)
-        for provider, items in providers.items():
-            menu.addGroupHeader(provider)
+            groups.setdefault(m.group, []).append(m)
+        for group_name, items in groups.items():
+            if group_name:
+                menu.addGroupHeader(group_name)
             for m in items:
-                if m.reasoning_levels:
+                if m.efforts:
                     sub = menu.addMenu(m.name)
                     act = sub.menuAction()
-                    for lv in m.reasoning_levels:
-                        la = QAction(REASONING_LABELS.get(lv, lv), sub, checkable=True)
+                    for eff in m.efforts:
+                        la = QAction(eff.label, sub, checkable=True)
+                        ModelMenu.describe(la, eff.description)
                         la.triggered.connect(
-                            lambda _=False, mid=m.id, lv=lv: self.set_selection(mid, lv)
+                            lambda _=False, mid=m.id, lv=eff.id: self.set_selection(mid, lv)
                         )
                         group.addAction(la)
                         sub.addAction(la)
-                        self._level_actions[(m.id, lv)] = la
+                        self._level_actions[(m.id, eff.id)] = la
                 else:
                     act = QAction(m.name, menu)
-                    act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, ""))
+                    act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, None))
                     menu.addAction(act)
                 act.setCheckable(True)
+                ModelMenu.describe(act, m.description, m.tier)
                 self._model_actions[m.id] = act
         return menu
 
@@ -277,23 +281,22 @@ class Composer(QFrame):
         if m is None:
             return
         levels = m.reasoning_levels
+        lv: str | None
         if not levels:
-            lv = ""
+            lv = None  # 模型不支持推理强度：用模型默认
         elif reasoning in levels:
-            lv = reasoning or ""
+            lv = reasoning
         elif settings.default_reasoning in levels:
             lv = settings.default_reasoning
         else:
             lv = levels[len(levels) // 2]
         self.model_id, self.reasoning = m.id, lv
         for mid, a in self._model_actions.items():
-            a.setChecked(mid == m.id)
-            f = a.font()
-            f.setBold(mid == m.id)
-            a.setFont(f)
+            a.setChecked(mid == m.id)  # 选中只靠打勾，不加粗、不加底色
         for (mid, l2), a in self._level_actions.items():
             a.setChecked(mid == m.id and l2 == lv)
-        self.model_chip.setText(m.name + (f" · {REASONING_LABELS.get(lv, lv)}" if lv else ""))
+        eff = m.effort(lv) if lv is not None else None
+        self.model_chip.setText(m.name + (f" · {eff.label}" if eff else ""))
         self.selectionChanged.emit(self.model_id, self.reasoning)
 
     def set_key_bindings(self, bindings: dict[str, str]) -> None:

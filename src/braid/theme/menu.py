@@ -11,8 +11,18 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from PySide6.QtCore import Property, QMargins, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QPixmap
+from PySide6.QtCore import Property, QEvent, QMargins, QPointF, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QFont,
+    QFontMetricsF,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QMenu,
@@ -71,7 +81,7 @@ class RoundedMenu(QMenu):
 
     def addMenu(self, *args, **kwargs):
         if len(args) == 1 and isinstance(args[0], str):
-            sub = RoundedMenu(args[0], self)
+            sub = type(self)(args[0], self)
             super().addMenu(sub)
             return sub
         return super().addMenu(*args, **kwargs)
@@ -87,6 +97,110 @@ class RoundedMenu(QMenu):
         p.drawRoundedRect(card, self.radius, self.radius)
         p.end()
         super().paintEvent(e)
+
+
+DESC_PROP = "braidDesc"  # 菜单项第二行说明
+TAG_PROP = "braidTag"  # 菜单项右侧小标签（高 / 中 / 低）
+
+
+class ModelMenu(RoundedMenu):
+    """模型菜单：每项两行，第一行名称（QSS 留出下方 padding），第二行 text3 12px 说明；
+    右侧可选一个小标签。选中只靠打勾（QSS 去掉 :checked 底色），子菜单同样是 ModelMenu。"""
+
+    DESC_PX = 12
+    TEXT_X = 48  # 与第一行名称左缘对齐（QSS padding-left 32 + 勾选列 16）
+    TAG_PX = 11
+
+    def __init__(self, title: str | QWidget | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(title, parent)
+        self.setProperty("role", "modelMenu")
+        # 菜单项一律常规字重（400）；QSS 里 modelMenu 的 ::item 也写了 font-weight: normal
+        f = self.font()
+        f.setWeight(QFont.Weight.Normal)
+        self.setFont(f)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    ARROW = 12  # 自绘 chevron 尺寸（不用字体字形、不用 Qt 原生箭头）
+    ARROW_RIGHT = 12  # 箭头右缘距行右缘
+    TAG_GAP = 6  # 标签文字右缘与箭头左缘的间距
+
+    def arrow_rect(self, action: QAction) -> QRectF:
+        """子菜单箭头位置；没有子菜单的行也占这个位，保证所有行标签右缘对齐。"""
+        r = QRectF(self.actionGeometry(action))
+        x = r.right() - self.ARROW_RIGHT - self.ARROW
+        return QRectF(x, r.center().y() - self.ARROW / 2, self.ARROW, self.ARROW)
+
+    def tag_right(self, action: QAction) -> float:
+        """右侧标签的右缘 x：所有行一致（不看这一行有没有子菜单箭头）。"""
+        return self.arrow_rect(action).left() - self.TAG_GAP
+
+    def tag_rect(self, action: QAction) -> QRectF:
+        """标签文字的外接框：与行整体垂直居中（AlignVCenter）。"""
+        tag = str(action.property(TAG_PROP) or "")
+        f = QFont(self.font())
+        f.setPixelSize(self.TAG_PX)
+        fm = QFontMetricsF(f)
+        w = fm.horizontalAdvance(tag)
+        h = fm.height()
+        cy = QRectF(self.actionGeometry(action)).center().y()
+        return QRectF(self.tag_right(action) - w, cy - h / 2, w, h)
+
+    def _draw_chevron(self, p: QPainter, r: QRectF, color: QColor) -> None:
+        pen = QPen(color, 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        cx, cy = r.center().x(), r.center().y()
+        path = QPainterPath(QPointF(cx - 2, cy - 4))
+        path.lineTo(QPointF(cx + 2, cy))
+        path.lineTo(QPointF(cx - 2, cy + 4))
+        p.drawPath(path)
+
+    @staticmethod
+    def describe(action: QAction, desc: str, tag: str = "") -> None:
+        action.setProperty(DESC_PROP, desc)
+        action.setProperty(TAG_PROP, tag)
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        super().paintEvent(e)
+        from braid.theme.palette import qcolor
+
+        dark = is_dark()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        f = QFont(self.font())
+        f.setPixelSize(self.DESC_PX)
+        f.setWeight(QFont.Weight.Normal)
+        tf = QFont(f)
+        tf.setPixelSize(self.TAG_PX)
+        for a in self.actions():
+            desc = a.property(DESC_PROP)
+            tag = a.property(TAG_PROP)
+            if not desc and not tag and a.menu() is None:
+                continue
+            r = self.actionGeometry(a)
+            right = int(self.tag_right(a))
+            if a.menu() is not None:
+                self._draw_chevron(p, self.arrow_rect(a), qcolor("text3", dark))
+            if tag:
+                p.setFont(tf)
+                tr = self.tag_rect(a)
+                # 纯文字小标签：无底色，text3，与行整体垂直居中
+                p.setPen(qcolor("text3", dark))
+                p.drawText(
+                    tr, int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), str(tag)
+                )
+                right = int(tr.left()) - 8
+            if desc:
+                p.setFont(f)
+                p.setPen(qcolor("text3", dark))
+                x = r.left() + self.TEXT_X
+                dr = QRect(x, r.bottom() - 22, right - x, 18)
+                txt = p.fontMetrics().elidedText(str(desc), Qt.TextElideMode.ElideRight, dr.width())
+                p.drawText(dr, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), txt)
+        p.end()
 
 
 class ChipButton(QToolButton):
@@ -109,7 +223,8 @@ class ChipButton(QToolButton):
 
     def sizeHint(self) -> QSize:  # noqa: N802
         fm = self.fontMetrics()
-        w = self.PAD_LEFT + fm.horizontalAdvance(self.text()) + self._reserved()
+        # +2：horizontalAdvance 取整后可能比实际排版窄 1px，导致文字被省略成“…”
+        w = self.PAD_LEFT + fm.horizontalAdvance(self.text()) + 2 + self._reserved()
         return QSize(w, max(super().sizeHint().height(), fm.height() + 8))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802
@@ -118,6 +233,12 @@ class ChipButton(QToolButton):
     def setText(self, text: str) -> None:  # noqa: N802
         super().setText(text)
         self.updateGeometry()
+
+    def changeEvent(self, e: QEvent) -> None:  # noqa: N802
+        # QSS 的 font-size 在 polish 时才生效：字体变了要重算宽度，否则文字被省略成“…”
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.FontChange:
+            self.updateGeometry()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         opt = QStyleOptionToolButton()

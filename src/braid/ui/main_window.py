@@ -204,6 +204,13 @@ class MainWindow(QMainWindow):
             )
         if self.settings_page is not None:
             self.settings_page.setVisible(on)
+        if leaving and self.settings_page is not None:
+            # 离开设置就销毁设置页：释放内存，之后切主题时也不用重新套用它那几百个控件的样式。
+            # 下次进入重新构建（分区页按需构建，首开只建默认分区）。
+            old = self.settings_page
+            self.settings_page = None
+            self._center_layout.removeWidget(old)
+            old.deleteLater()
         self.chat_view.setVisible(not on)
         self.composer.setVisible(not on)
         # 设置页的最小宽度比对话区大，切换后重算窗口下限，避免中栏被裁切

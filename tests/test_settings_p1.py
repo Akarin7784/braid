@@ -214,6 +214,8 @@ def test_keyring_notice_once(qtbot, tmp_path):
 
     keyring.set_keyring(fail.Keyring())
     page, _ = _settings(qtbot, tmp_path, 2)
+    assert page.models.notice.isHidden()  # 首帧后才检查
+    page.models.run_keyring_check()
     hits = [w for w in page.findChildren(QLabel) if w.text() == secrets.INSTALL_HINT]
     assert hits == [page.models.notice] and not page.models.notice.isHidden()
     lay = page.models.layout()
@@ -420,6 +422,8 @@ def test_row_labels_regular_weight(qtbot, tmp_path, theme):
     page.setStyleSheet(load_qss(theme))
     page.show()
     qtbot.waitExposed(page)
+    for key, _label in NAV:  # 分区页按需构建，这里全部建出来再检查
+        page.ensure_page(key)
     rows = [r for p in page.pages.values() for c in p.findChildren(SettingCard) for r in c.rows()]
     assert len(rows) >= 10
     for r in rows:

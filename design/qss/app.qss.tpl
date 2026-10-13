@@ -125,7 +125,7 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingsTitle { font-size: 18px; color: ${text}; }
 #settingsSubtitle { font-size: 13px; color: ${text2}; }
 #settingsEmpty { font-size: 13px; color: ${text3}; }
-#mcpTarget { font-size: 12px; color: ${text3}; font-family: "JetBrains Mono", "Menlo", "Consolas", monospace; }
+#mcpTarget { color: ${text3}; }  /* 字体由 widgets.mono_font() 设置 */
 #mcpTarget[error="true"] { color: ${danger}; }
 #providerName { font-size: 14px; font-weight: 600; }
 #settingLabel { color: ${text}; font-weight: normal; }
@@ -187,3 +187,7 @@ QToolButton#dialogCancel { background: ${control}; color: ${text}; border: none;
 QToolButton#dialogCancel:hover { background: ${hover}; }
 QToolButton#dangerButton { background: ${danger}; color: ${on_danger}; border: none; border-radius: 8px; padding: 0 14px; }
 QDialog#resetDialog QCheckBox::indicator:checked { background: ${danger}; }
+/* 模型与服务：钥匙串状态（检查前 text3） */
+QLabel#keyringStatus { color: ${text3}; font-size: 12px; }
+QLabel#keyringStatus[state="ok"] { color: ${text3}; }
+QLabel#keyringStatus[state="fail"] { color: ${warning}; }

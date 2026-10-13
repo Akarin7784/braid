@@ -103,6 +103,7 @@ app.processEvents()
 w.repaint()
 res["settings_open_ms"] = (time.perf_counter() - t) * 1000
 sp = w.settings_page
+settle(w, 300)  # 模拟用户点下一个分区前的停顿：首帧后的延后任务（钥匙串检查、字体预热）在此完成
 from braid.ui.settings.pages import NAV
 for key, _label in NAV:
     t = time.perf_counter()
@@ -116,6 +117,8 @@ res["rss_after_settings_mb"] = rss()
 # 主题切换（真实路径：config_changed → apply_theme + chat_view.set_dark），各 3 次取均值
 w.show_settings(False)
 app.processEvents()
+settle(w, 200)  # 让 deleteLater 等延迟事件真正执行（与真实事件循环一致）
+res["rss_after_leave_settings_mb"] = rss()
 ld, dl = [], []
 for _ in range(3):
     t = time.perf_counter(); backend.set_config("general", {"theme": "dark"}); app.processEvents(); w.repaint(); ld.append((time.perf_counter() - t) * 1000)

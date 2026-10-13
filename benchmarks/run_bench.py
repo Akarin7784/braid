@@ -26,6 +26,8 @@ LOWER_IS_BETTER = {
     "multipara_stream_chars_per_s": False,
     "multipara_frame_ms_avg": True,
     "multipara_frame_ms_p95": True,
+    "stream_paints_per_update": True,
+    "stream_paints_per_update_same_height": True,
 }
 
 
@@ -133,6 +135,55 @@ def bench_stream_multipara(app: QApplication) -> dict[str, float]:
     return bench_stream_buffered(app, prefix="multipara", para_every=40)
 
 
+def bench_repaint_scope(app: QApplication) -> dict[str, float]:
+    """每次流式写入后，事件循环里自然发生的气泡绘制次数（不强制 repaint）。
+
+    200 行历史、视口在底部；每 4 次写入有 1 次换段（行高变化），其余行高不变。
+    """
+    from braid.ui.chat_view import ChatDelegate, ChatView
+
+    paints = [0]
+    orig_paint = ChatDelegate.paint
+
+    def counted_paint(self, painter, option, index):  # noqa: ANN001, ANN202
+        paints[0] += 1
+        orig_paint(self, painter, option, index)
+
+    ChatDelegate.paint = counted_paint  # type: ignore[method-assign]
+    try:
+        v = ChatView()
+        v.resize(900, 700)
+        v.show()
+        m = v.chat_model
+        m.set_messages([("user", f"历史 {i}") for i in range(200)])
+        row = m.append("assistant", "流式", streaming=True)
+
+        def settle() -> None:
+            for _ in range(3):
+                app.processEvents()
+                time.sleep(0.005)
+
+        settle()
+        total = same = 0
+        n_same = 0
+        for i in range(120):
+            grow = i % 4 == 3
+            paints[0] = 0
+            m.append_text(row, "\n新段" if grow else "流")
+            settle()
+            total += paints[0]
+            if not grow:
+                same += paints[0]
+                n_same += 1
+        v.close()
+    finally:
+        ChatDelegate.paint = orig_paint  # type: ignore[method-assign]
+    return {
+        "stream_paints_per_update": total / 120,
+        "stream_paints_per_update_same_height": same / max(1, n_same),
+    }
+
+
 def bench_idle_mem(app: QApplication) -> float:
     from braid.ui import main_window
 
@@ -178,6 +229,7 @@ def main() -> int:
         "stream_chars_per_s": bench_stream(app),
         **bench_stream_buffered(app),
         **bench_stream_multipara(app),
+        **bench_repaint_scope(app),
         "platform": sys.platform,
     }
     with open(a.out, "w", encoding="utf-8") as f:

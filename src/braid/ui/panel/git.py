@@ -281,10 +281,10 @@ class FileRow(QWidget):
         return QRect(x, (ROW_H - DOT_PX) // 2, DOT_PX, DOT_PX)
 
     def dot_colors(self) -> tuple[QColor, QColor | None]:
-        """(圆圈/填充色, 勾色)：已暂存 brand 实心 + 白勾；未暂存 text3 空心。"""
+        """(圆圈/填充色, 勾色)：已暂存 brand 实心 + on_brand 勾；未暂存 text3 空心。"""
         dark = is_dark()
         if self.staged:
-            return qcolor("brand", dark), QColor("#FFFFFF")
+            return qcolor("brand", dark), qcolor("on_brand", dark)
         return qcolor("text3", dark), None
 
     def name_color(self) -> QColor:

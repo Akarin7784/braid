@@ -361,3 +361,33 @@ def test_diff_font_cjk_fallback_regular(qtbot):
     if cjk:
         assert fams[-1] in cjk  # 中文落到标题字体链里的 CJK 族
         assert not any(x in cjk for x in fams[:-1])  # 等宽西文部分不含 CJK 族
+
+
+def test_stage_tick_uses_on_brand(qtbot):
+    _, p = _page(qtbot)
+    row = p.entry("src/pages/forgot.py", True).row
+    app = QApplication.instance()
+    for dark in (False, True):
+        app.setProperty("braidDark", dark)
+        try:
+            _, tick = row.dot_colors()
+            assert _hex(tick) == _pal(dark)["on_brand"] == "#FFFFFF"
+        finally:
+            app.setProperty("braidDark", False)
+
+
+def test_diff_cjk_glyphs_resolve_to_regular(qtbot):
+    from PySide6.QtGui import QFontDatabase, QTextLayout
+
+    from braid.ui.panel.git import mono_font
+
+    cjk = set(QFontDatabase.families(QFontDatabase.WritingSystem.SimplifiedChinese))
+    if not cjk:
+        return
+    lay = QTextLayout("忘记密码", mono_font())
+    lay.beginLayout()
+    lay.createLine()
+    lay.endLayout()
+    for run in lay.glyphRuns():
+        rf = run.rawFont()
+        assert rf.familyName() in cjk and rf.weight() == 400

@@ -1,6 +1,6 @@
 """消息列表：QListView + 自定义 delegate（天然虚拟化，只绘制可见行）。
 
-- 流式输出：StreamBuffer 以约 16ms（一帧）节流把增量合并进模型，只刷新最后一行。
+- 流式输出：StreamBuffer 以 THROTTLE_MS（50ms）节流把增量合并进模型，只刷新最后一行。
 - Markdown：QTextDocument.setMarkdown 渲染，按 (文本, 宽度, 主题) 缓存文档与高度。
 - 悬停操作栏：复制 / 重试 / 编辑，以及多版本时的 `< 1/2 >` 分支切换。
 """
@@ -60,7 +60,7 @@ from braid.theme.nine_slice import NineSliceShadow
 MAX_WIDTH = 680  # 对话列最大宽度（设计偏差 B），居中
 PAD = 12
 ACTION_H = 24
-THROTTLE_MS = 16
+THROTTLE_MS = 50  # 每帧约 30ms，更小的间隔只会让排版连着跑；增量排版后再按基准调整
 # 与 QSS 中 `*` 文字色、userBubble 底色保持一致（tokens.json）
 CODE_COLLAPSE_LINES = 20
 MONO = "'JetBrains Mono','Menlo','Consolas',monospace"
@@ -241,7 +241,7 @@ class ChatModel(QAbstractListModel):
 
 
 class StreamBuffer(QObject):
-    """把高频增量缓冲起来，按约一帧（THROTTLE_MS）合并写入模型，避免每个 token 都触发重排。
+    """把高频增量缓冲起来，按 THROTTLE_MS 合并写入模型，避免每个 token 都触发重排。
 
     定时器归本对象所有（随 ChatView 销毁），只在有待写入内容时运行。
     """

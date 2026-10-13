@@ -592,6 +592,10 @@ class ChatDelegate(QStyledItemDelegate):
         self.cache = _DocCache()
         # 正在流式输出的行（按 ChatItem 身份）-> 增量文档
         self._streams: dict[int, tuple[ChatItem, _StreamDoc]] = {}
+        # 已结束消息的行高缓存：id(item) -> (键, 高度)。键含文本/变体/展开状态、宽度和 dark，
+        # 任一变化（编辑、切变体、展开代码块、改宽、切主题）都自然失效；流式行不缓存。
+        self._heights: dict[int, tuple[tuple[object, ...], int]] = {}
+        self.height_hits = 0
         self.hover_row = -1
         self.dark_override: bool | None = None  # None 表示跟随 app 的 braidDark
         self.hover_pos: QPoint | None = None  # 视图坐标，用于代码块悬停“复制”
@@ -693,11 +697,29 @@ class ChatDelegate(QStyledItemDelegate):
         self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
     ) -> QSize:
         item: ChatItem = index.data(ChatModel.ItemRole)
+        width = option.rect.width()
+        key: tuple[object, ...] | None = None
+        if not item.streaming:
+            exp = frozenset(b for v, b in item.code_expanded if v == item.current)
+            key = (item.role, item.current, item.text, item.render_mode, exp, width, self.dark)
+            hit = self._heights.get(id(item))
+            if hit is not None and hit[0] == key:
+                self.height_hits += 1
+                return QSize(width, hit[1])
+        else:
+            self._heights.pop(id(item), None)
         col = self._column(option.rect)
         tw = max(80, self._text_width(item, col.width()))
         doc = self._doc(item, tw)
         h = int(doc.size().height()) + 2 * PAD + ACTION_H
-        return QSize(option.rect.width(), h)
+        if key is not None:
+            if len(self._heights) > 4096:
+                self._heights.clear()
+            self._heights[id(item)] = (key, h)
+        return QSize(width, h)
+
+    def clear_height_cache(self) -> None:
+        self._heights.clear()
 
     def _bubble_rect(self, item: ChatItem, col: QRect, doc: QTextDocument) -> QRect:
         w = int(doc.idealWidth()) + 2 * PAD

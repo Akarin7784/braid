@@ -170,18 +170,42 @@ def test_main_window_grip_drag_clamped(qtbot):
     assert p.width() == MIN_WIDTH
 
 
+def _col_mins(w):
+    from braid.ui.panel.shell import splitter_min_width
+
+    split = w.splitter
+    widgets = [split.widget(i) for i in range(split.count())]
+    handles = sum(split.handle(i).width() for i in range(1, split.count()))
+    return sum(splitter_min_width(x) for x in widgets) + handles
+
+
 def test_narrow_window_clamps_to_chat_min(qtbot):
+    """窄窗口：宽度由各栏实际最小宽度推出，不写死像素，也不假设窗口能精确到请求值。"""
     from braid.ui.panel.shell import splitter_min_width
 
     w = _main_window(qtbot)
-    w.resize(w.minimumWidth(), 700)
+    split, p = w.splitter, w.panel
+    chat = split.widget(split.indexOf(p) - 1)
+    chat_min = splitter_min_width(chat)
+    # 分割器之外的窗口开销（中心控件边距等）：窗口宽 - 分割器宽
+    overhead = w.width() - split.width()
+    target = max(w.minimumWidth(), _col_mins(w) + overhead)
+    w.resize(target, 700)
+    qtbot.waitUntil(lambda: abs(split.width() + overhead - w.width()) <= 1)
     QApplication.processEvents()
-    p = w.panel
-    chat = w.splitter.widget(w.splitter.indexOf(p) - 1)
+
     p.set_panel_width(MAX_WIDTH)
     QApplication.processEvents()
-    assert chat.width() >= splitter_min_width(chat)
     assert MIN_WIDTH <= p.width() == p.width_range()[1] <= MAX_WIDTH
+    if split.width() >= _col_mins(w):  # 空间够时：中栏绝不被挤到最小宽度以下
+        assert chat.width() >= chat_min
+    else:  # 空间本身不够（窗口最小宽度 < 各栏最小宽度之和）：右栏至少不多占
+        assert p.width() == MIN_WIDTH
+    p.set_panel_width(MIN_WIDTH)
+    QApplication.processEvents()
+    assert p.width() == MIN_WIDTH
+    if split.width() >= _col_mins(w):
+        assert chat.width() >= chat_min
 
 
 def test_set_width_before_layout_is_applied_later(qtbot):

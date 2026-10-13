@@ -95,3 +95,20 @@ QTabBar#PanelTabs::tab { padding: 4px 8px; font-size: 13px; }
 #ChatArea QPushButton[variant="ghost"]:hover { color: ${text}; }
 #Composer QComboBox::down-arrow { image: none; width: 0; }
 #Composer QComboBox { padding-right: 10px; }
+
+/* —— v1.3：多级菜单（模型 + 推理强度）。$${assets} 由 load_qss 在运行时替换为图标目录 —— */
+QMenu { background: ${surface}; border: none; border-radius: 12px; padding: 6px; }
+QMenu[rounded="true"] { background: transparent; padding: 24px; qproperty-surfaceColor: "${surface}"; }
+QMenu::item { color: ${text}; padding: 7px 30px 7px 32px; border-radius: 8px; min-width: 150px; font-size: 13px; }
+QMenu::item:selected { background: ${hover}; }
+QMenu::item:checked { background: ${active}; font-weight: 600; }
+QMenu::item:checked:selected { background: ${hover}; }
+QMenu::item:disabled { color: ${text3}; background: transparent; font-size: 12px; padding: 8px 12px 3px 12px; }
+QMenu::indicator { width: 16px; height: 16px; left: 10px; }
+QMenu::indicator:checked { image: url($${assets}/icons/check_${name}.png); }
+QMenu::right-arrow { image: url($${assets}/icons/chevron_right_${name}.png); width: 12px; height: 12px; right: 10px; }
+QMenu::separator { height: 1px; margin: 5px 10px; background: transparent; }
+QMenu::section { color: ${text3}; font-size: 12px; padding: 8px 12px 4px 12px; }
+QToolButton[role="modelChip"] { background: ${control}; border-radius: 12px; padding: 4px 26px 4px 12px; font-size: 12px; }
+QToolButton[role="modelChip"]:hover, QToolButton[role="modelChip"][popupOpen="true"] { background: ${hover}; }
+QToolButton[role="modelChip"]::menu-indicator { image: url($${assets}/icons/chevron_down_${name}.png); width: 10px; height: 10px; subcontrol-position: right center; right: 10px; }

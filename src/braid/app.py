@@ -15,6 +15,7 @@ def _qss(theme: str) -> str:
 def main() -> int:
     app = QApplication(sys.argv)
     theme = "dark" if "--dark" in sys.argv else "light"
+    app.setProperty("braidDark", theme == "dark")
     app.setStyleSheet(_qss(theme))
     w = MainWindow(MockBackend())
     w.chat_view.set_dark(theme == "dark")

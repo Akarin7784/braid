@@ -46,7 +46,8 @@ class ChatController(QObject):
     def _start(self, text: str, row: int) -> None:
         assert self.session_id is not None
         self._it = iter(
-            self.backend.send(self.session_id, text, self.model_id, self.reasoning or "medium")
+            # 不支持推理强度的模型传空串，档位 id 一律来自后端的 ModelInfo.efforts
+            self.backend.send(self.session_id, text, self.model_id, self.reasoning)
         )
         self.view.stream.start(row)
         self._pump.start()

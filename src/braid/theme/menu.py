@@ -134,13 +134,10 @@ class ModelMenu(RoundedMenu):
             if tag:
                 p.setFont(tf)
                 fm = p.fontMetrics()
-                tw = fm.horizontalAdvance(str(tag)) + 12
-                th = fm.height() + 4
-                tr = QRect(right - tw, r.top() + 7, tw, th)
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(qcolor("control", dark))
-                p.drawRoundedRect(tr, 6, 6)
-                p.setPen(qcolor("text2", dark))
+                tw = fm.horizontalAdvance(str(tag))
+                tr = QRect(right - tw, r.top() + 7, tw, fm.height() + 4)
+                # 纯文字小标签：无底色，text3
+                p.setPen(qcolor("text3", dark))
                 p.drawText(tr, int(Qt.AlignmentFlag.AlignCenter), str(tag))
                 right = tr.left() - 8
             if desc:

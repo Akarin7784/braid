@@ -109,6 +109,6 @@ QMenu::indicator:checked { image: url($${assets}/icons/check_${name}.png); }
 QMenu::right-arrow { image: url($${assets}/icons/chevron_right_${name}.png); width: 12px; height: 12px; right: 10px; }
 QMenu::separator { height: 1px; margin: 5px 10px; background: transparent; }
 QMenu::section { color: ${text3}; font-size: 12px; padding: 8px 12px 4px 12px; }
-QToolButton[role="modelChip"] { background: ${control}; border-radius: 12px; padding: 4px 26px 4px 12px; font-size: 12px; }
+QToolButton[role="modelChip"] { background: ${control}; border-radius: 12px; padding: 4px 34px 4px 12px; font-size: 12px; }
 QToolButton[role="modelChip"]:hover, QToolButton[role="modelChip"][popupOpen="true"] { background: ${hover}; }
-QToolButton[role="modelChip"]::menu-indicator { image: url($${assets}/icons/chevron_down_${name}.png); width: 10px; height: 10px; subcontrol-position: right center; right: 10px; }
+QToolButton[role="modelChip"]::menu-indicator { image: url($${assets}/icons/chevron_down_${name}.png); width: 10px; height: 10px; subcontrol-origin: padding; subcontrol-position: right center; right: 12px; }

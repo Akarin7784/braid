@@ -2,54 +2,79 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QAbstractButton, QApplication, QHBoxLayout, QWidget
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QEnterEvent, QIcon, QImage, QPainter, QPaintEvent, QPen
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QStyle,
+    QStyleOptionToolButton,
+    QToolButton,
+    QWidget,
+)
 
 BTN = 28
 ICON = 10
 SPACING = 2
 RIGHT_MARGIN = 10
 
-COLORS = {
-    False: {"text2": "#6B6B69", "hover": "#E6E6E4"},
-    True: {"text2": "#A3A3A0", "hover": "#353533"},
-}
-CLOSE_HOVER = "#E5484D"
 
+class ControlButton(QToolButton):
+    """样式（底色、hover、圆角）全部交给 QSS；图标用 palette().buttonText() 自绘。"""
 
-def _dark() -> bool:
-    app = QApplication.instance()
-    return bool(app.property("braidDark")) if app else False
-
-
-class ControlButton(QAbstractButton):
     def __init__(self, kind: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.kind = kind
         self.setObjectName(f"WinCtl_{kind}")
+        self.setProperty("role", "windowControl")
+        if kind == "close":
+            self.setProperty("kind", "close")
         self.setFixedSize(BTN, BTN)
-        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.setAutoRaise(True)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setToolTip({"min": "最小化", "max": "最大化", "close": "关闭"}[kind])
 
     def sizeHint(self) -> QSize:
         return QSize(BTN, BTN)
 
+    def _repolish(self) -> None:
+        # QSS 的 :hover 颜色只在 polish 时写进 palette，进出时重新 polish
+        st = self.style()
+        st.unpolish(self)
+        st.polish(self)
+        self.update()
+
+    def enterEvent(self, e: QEnterEvent) -> None:
+        super().enterEvent(e)
+        self._repolish()
+
+    def leaveEvent(self, e: QEvent) -> None:
+        super().leaveEvent(e)
+        self._repolish()
+
+    def icon_color(self) -> QColor:
+        """图标颜色：palette().buttonText()；QSS 的 :hover color 不会写进 palette，
+        所以悬停时让样式按当前状态画一个实心字形，取其像素颜色（仍完全由 QSS 决定）。"""
+        base = self.palette().buttonText().color()
+        if not (self.underMouse() or self.isDown()):
+            return base
+        opt = QStyleOptionToolButton()
+        self.initStyleOption(opt)
+        opt.state |= QStyle.StateFlag.State_MouseOver
+        opt.text, opt.icon = "\u2588", QIcon()
+        opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonTextOnly
+        img = QImage(self.size(), QImage.Format.Format_ARGB32)
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        self.style().drawComplexControl(QStyle.ComplexControl.CC_ToolButton, opt, p, self)
+        p.end()
+        c = img.pixelColor(img.width() // 2, img.height() // 2)
+        return QColor(c.red(), c.green(), c.blue()) if c.alpha() == 255 else base
+
     def paintEvent(self, e: QPaintEvent) -> None:
-        c = COLORS[_dark()]
+        super().paintEvent(e)  # QSS 画底色
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        hover = self.underMouse() or self.isDown()
-        icon = QColor(c["text2"])
-        if hover:
-            bg = QColor(CLOSE_HOVER if self.kind == "close" else c["hover"])
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(bg)
-            p.drawRoundedRect(QRectF(self.rect()), 8, 8)
-            if self.kind == "close":
-                icon = QColor("#FFFFFF")
-        pen = QPen(icon, 1.2)
+        pen = QPen(self.icon_color(), 1.2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -58,8 +83,7 @@ class ControlButton(QAbstractButton):
         if self.kind == "min":
             p.drawLine(QPointF(r.left(), r.center().y()), QPointF(r.right(), r.center().y()))
         elif self.kind == "max":
-            win = self.window()
-            if win.isMaximized():
+            if self.window().isMaximized():
                 p.drawRect(r.adjusted(0, 2, -2, 0))
                 p.drawPolyline(
                     [

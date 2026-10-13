@@ -146,3 +146,41 @@ def test_center_fills_when_panel_collapsed(win, qtbot):
     assert chat.mapTo(win, chat.rect().topRight()).x() >= win.width() - 1
     win.set_panel_open(True, animate=False)
     assert win.panel.width() >= 240
+
+
+def test_selected_bg_uses_active_token():
+    from braid.ui.sidebar import SELECTED_BG
+
+    assert SELECTED_BG == {False: "#E9E9E8", True: "#3A3A39"}
+
+
+def test_window_control_properties_and_qss_hover(win, qtbot):
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+
+    from braid.theme import load_qss
+
+    QApplication.instance().setStyleSheet(load_qss("light"))
+    try:
+        c = win.controls
+        for b in c.buttons.values():
+            assert b.property("role") == "windowControl"
+        close = c.buttons["close"]
+        assert close.property("kind") == "close"
+        assert c.buttons["min"].property("kind") is None
+        close._repolish()
+        normal = close.palette().buttonText().color()
+        assert normal == QColor("#6B6B69")
+        close.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
+        assert close.icon_color() == QColor("#FFFFFF")  # 来自 QSS :hover
+        mn = c.buttons["min"]
+        mn.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
+        assert mn.icon_color() == normal
+        img = close.grab().toImage()
+        assert img.pixelColor(2, 14) == QColor("#E5484D")  # QSS 画的 hover 底
+        QApplication.sendEvent(close, QEvent(QEvent.Type.Leave))
+        close.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+        assert close.icon_color() == normal
+    finally:
+        QApplication.instance().setStyleSheet("")

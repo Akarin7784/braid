@@ -22,7 +22,26 @@ from braid.core.backend import AgentBackend, Session
 
 SID = Qt.ItemDataRole.UserRole
 HEADER = Qt.ItemDataRole.UserRole + 1
-SELECTED_BG = {False: "#E4E4E2", True: "#3A3A38"}
+_ACTIVE_FALLBACK = {False: "#E9E9E8", True: "#3A3A39"}
+
+
+def _load_active() -> dict[bool, str]:
+    """优先读 design/tokens.json 的 active token，读不到用默认值。"""
+    import json
+    from pathlib import Path
+
+    for base in Path(__file__).resolve().parents:
+        f = base / "design" / "tokens.json"
+        if f.is_file():
+            try:
+                t = json.loads(f.read_text(encoding="utf-8"))
+                return {False: t["light"]["active"], True: t["dark"]["active"]}
+            except (OSError, ValueError, KeyError):
+                break
+    return dict(_ACTIVE_FALLBACK)
+
+
+SELECTED_BG = _load_active()
 HOVER_BG = {False: "#ECECEB", True: "#2E2E2C"}
 HEADER_FG = {False: "#8A8A87", True: "#8A8A87"}
 

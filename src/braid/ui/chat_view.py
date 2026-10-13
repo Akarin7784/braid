@@ -1,6 +1,6 @@
 """消息列表：QListView + 自定义 delegate（天然虚拟化，只绘制可见行）。
 
-- 流式输出：StreamBuffer 以 50ms 节流把增量合并进模型，只刷新最后一行。
+- 流式输出：StreamBuffer 以约 16ms（一帧）节流把增量合并进模型，只刷新最后一行。
 - Markdown：QTextDocument.setMarkdown 渲染，按 (文本, 宽度, 主题) 缓存文档与高度。
 - 悬停操作栏：复制 / 重试 / 编辑，以及多版本时的 `< 1/2 >` 分支切换。
 """
@@ -60,7 +60,7 @@ from braid.theme.nine_slice import NineSliceShadow
 MAX_WIDTH = 680  # 对话列最大宽度（设计偏差 B），居中
 PAD = 12
 ACTION_H = 24
-THROTTLE_MS = 50
+THROTTLE_MS = 16
 # 与 QSS 中 `*` 文字色、userBubble 底色保持一致（tokens.json）
 CODE_COLLAPSE_LINES = 20
 MONO = "'JetBrains Mono','Menlo','Consolas',monospace"
@@ -201,9 +201,8 @@ class ChatModel(QAbstractListModel):
         self._changed(row)
 
     def finish(self, row: int) -> None:
+        """标记流式结束；不切换渲染模式，由流结束路径显式调用 finalize(row)。"""
         self.items[row].streaming = False
-        # mock：目前结束即切换；流式优化接手后可改为由调用方显式 finalize(row)。
-        self.finalize(row)
         self._changed(row)
 
     def finalize(self, row: int) -> None:
@@ -242,34 +241,52 @@ class ChatModel(QAbstractListModel):
 
 
 class StreamBuffer(QObject):
-    """把高频增量按 50ms 合并后写入模型，避免每个字符都触发重排。"""
+    """把高频增量缓冲起来，按约一帧（THROTTLE_MS）合并写入模型，避免每个 token 都触发重排。
+
+    定时器归本对象所有（随 ChatView 销毁），只在有待写入内容时运行。
+    """
 
     def __init__(self, model: ChatModel, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.model = model
         self.row = -1
         self._pending: list[str] = []
-        self._timer = QTimer(self, interval=THROTTLE_MS)
+        self._timer = QTimer(self)
+        self._timer.setInterval(THROTTLE_MS)
+        self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.flush)
 
+    @property
+    def active(self) -> bool:
+        return self.row >= 0
+
     def start(self, row: int) -> None:
+        if self.active and self.row != row:
+            self.stop()
+        self._pending.clear()
         self.row = row
-        self._timer.start()
 
     def push(self, chunk: str) -> None:
+        if not chunk or not self.active:
+            return
         self._pending.append(chunk)
+        if not self._timer.isActive():
+            self._timer.start()
 
     def flush(self) -> None:
-        if self._pending and self.row >= 0:
+        self._timer.stop()
+        if self._pending and self.active:
             self.model.append_text(self.row, "".join(self._pending))
-            self._pending.clear()
+        self._pending.clear()
 
     def stop(self) -> None:
+        """流结束：写完剩余内容，标记结束，再显式切换到 Markdown 渲染（只一次）。"""
+        if not self.active:
+            return
         self.flush()
-        self._timer.stop()
-        if self.row >= 0:
-            self.model.finish(self.row)
-        self.row = -1
+        row, self.row = self.row, -1
+        self.model.finish(row)
+        self.model.finalize(row)
 
 
 def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:

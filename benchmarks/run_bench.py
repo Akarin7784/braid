@@ -17,7 +17,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 # 指标名 -> 越小越好(True) / 越大越好(False)
-LOWER_IS_BETTER = {"scroll_ms_per_frame": True, "stream_chars_per_s": False, "idle_rss_mb": True}
+LOWER_IS_BETTER = {
+    "scroll_ms_per_frame": True,
+    "stream_chars_per_s": False,
+    "idle_rss_mb": True,
+    "buffered_stream_chars_per_s": False,
+    "buffered_frame_ms_avg": True,
+}
 
 
 def _rss_mb() -> float:
@@ -69,10 +75,49 @@ def bench_stream(app: QApplication) -> float:
         if i % 10 == 0:
             app.processEvents()
     m.finish(row)
+    m.finalize(row)
     app.processEvents()
     rate = n * len(chunk) / (time.perf_counter() - t0)
     v.close()
     return rate
+
+
+def bench_stream_buffered(app: QApplication) -> dict[str, float]:
+    """模拟后端逐 token 推送，经 ChatView.stream 节流后写入模型；统计吞吐、模型更新次数与帧耗时。"""
+    from braid.ui.chat_view import ChatView
+
+    v = ChatView()
+    v.resize(900, 700)
+    v.show()
+    m = v.chat_model
+    m.set_messages([("user", f"历史 {i}") for i in range(200)])
+    row = m.append("assistant", "", streaming=True)
+    updates = [0]
+    m.dataChanged.connect(lambda *_: updates.__setitem__(0, updates[0] + 1))
+    token = "流式"
+    n = 3000
+    frames: list[float] = []
+    v.stream.start(row)
+    t0 = time.perf_counter()
+    for i in range(n):
+        v.stream.push(token)
+        if i % 8 == 7:  # 与 ChatController 每轮取 8 块一致
+            f0 = time.perf_counter()
+            app.processEvents()
+            v.viewport().repaint()
+            frames.append((time.perf_counter() - f0) * 1000)
+            time.sleep(0.001)
+    v.stream.stop()
+    app.processEvents()
+    dt = time.perf_counter() - t0
+    v.close()
+    frames.sort()
+    return {
+        "buffered_stream_chars_per_s": n * len(token) / dt,
+        "buffered_stream_updates": float(updates[0]),
+        "buffered_frame_ms_avg": sum(frames) / len(frames),
+        "buffered_frame_ms_p95": frames[int(len(frames) * 0.95)],
+    }
 
 
 def bench_idle_mem(app: QApplication) -> float:
@@ -118,13 +163,14 @@ def main() -> int:
         "idle_rss_mb": bench_idle_mem(app),
         "scroll_ms_per_frame": bench_scroll(app),
         "stream_chars_per_s": bench_stream(app),
+        **bench_stream_buffered(app),
         "platform": sys.platform,
     }
-    with open(a.out, "w") as f:
+    with open(a.out, "w", encoding="utf-8") as f:
         json.dump(res, f, indent=2)
     print(json.dumps(res, indent=2))
     if a.baseline and os.path.exists(a.baseline):
-        with open(a.baseline) as f:
+        with open(a.baseline, encoding="utf-8") as f:
             bad = compare(res, json.load(f), a.tolerance)
         for b in bad:
             print(f"::warning title=性能回退::{b}")

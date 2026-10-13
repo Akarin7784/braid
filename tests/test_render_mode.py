@@ -8,6 +8,8 @@ def test_streaming_row_is_plain_then_finalized(qtbot):
     m.append_text(row, "**粗体**")
     assert m.items[row].render_mode == "plain"
     m.finish(row)
+    assert m.items[row].render_mode == "plain"  # finish 不再隐式切换
+    m.finalize(row)
     assert m.items[row].render_mode == "markdown"
 
 

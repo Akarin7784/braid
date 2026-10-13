@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.artifacts import ArtifactSource
+from braid.core.git import GitSource
 from braid.ui.panel.tokens import tokens
 
 DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH = 420, 320, 720
@@ -102,6 +103,7 @@ class RightPanel(QFrame):
         parent: QWidget | None = None,
         mode: str = "light",
         artifact_source: ArtifactSource | None = None,
+        git_source: GitSource | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("RightPanel")
@@ -139,7 +141,13 @@ class RightPanel(QFrame):
         # 浏览器页延迟创建：首次切到该标签才 import（将来 QtWebEngine 在那里导入）
         self.stack.addWidget(QWidget())
         self.browser_loaded = False
-        self.stack.addWidget(placeholder_page("Git（即将推出）"))
+        if git_source is not None:
+            from braid.ui.panel.git import GitPage
+
+            self.git: QWidget = GitPage(git_source, theme=mode)
+        else:
+            self.git = placeholder_page("Git（未连接仓库）")
+        self.stack.addWidget(self.git)
         from braid.ui.panel.artifacts import ArtifactsPage
 
         self.artifacts = ArtifactsPage(artifact_source, theme=mode)

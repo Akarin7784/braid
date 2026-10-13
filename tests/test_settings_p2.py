@@ -407,6 +407,7 @@ def test_mono_font_not_generic_only(qtbot, monkeypatch):
         assert name in fams
     # 平台等宽字体排在比例 CJK 回退之前
     assert fams.index("Menlo") < fams.index("PingFang SC")
+    assert fams.index("Menlo") < fams.index("SF Mono")  # 避免 macOS 上 SF Mono 别名扫描
     assert fams.index("Consolas") < fams.index("Microsoft YaHei UI")
     f = widgets.mono_font(px=12)
     assert f.families() == fams and f.pixelSize() == 12

@@ -26,6 +26,7 @@ from braid.ui.settings.widgets import (
     SettingCard,
     SettingRow,
     ToggleSwitch,
+    mono_font,
 )
 
 SECTION = "mcp"
@@ -107,6 +108,7 @@ class _Tail(QWidget):
         self.cfg = cfg
         self.target = QLabel(self)
         self.target.setObjectName("mcpTarget")
+        self.target.setFont(mono_font(px=12))  # 与规则页一致，走已解析的等宽回退链
         self.target.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.switch = ToggleSwitch(self, checked=cfg.enabled)
         lay = QHBoxLayout(self)

@@ -31,6 +31,9 @@ def test_key_saved_masked_and_hint(qtbot, tmp_path):
     page, store = _page(qtbot, tmp_path)
     prov = page.models.add_provider()
     card = page.models.cards()[0]
+    assert not card.key.loaded and not card.key.edit.isEnabled()  # 钥匙串检查前不读 Key
+    page.models.run_keyring_check()
+    assert card.key.loaded and card.key.edit.isEnabled()
     card.key.edit.setText("sk-secret9876")
     card.key.edit.editingFinished.emit()
     assert secrets.get_key(prov.id) == "sk-secret9876"
@@ -50,6 +53,7 @@ def test_fail_backend_shows_warning(qtbot, tmp_path):
     store.upsert(Provider(name="X"))
     page = SettingsPage(store)
     qtbot.addWidget(page)
+    page.models.run_keyring_check()
     # 只在页顶显示一条，卡片里不再重复
     notice = page.models.notice
     assert not notice.isHidden()
@@ -75,6 +79,7 @@ def test_remove_via_confirm(qtbot, tmp_path, monkeypatch):
 def test_eye_icon_follows_state(qtbot, tmp_path):
     page, store = _page(qtbot, tmp_path)
     page.models.add_provider()
+    page.models.run_keyring_check()
     key = page.models.cards()[0].key
     assert key.eye.property("eyeState") == "closed" and not key.eye.icon().isNull()
     key.toggle_reveal()

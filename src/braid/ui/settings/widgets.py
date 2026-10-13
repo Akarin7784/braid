@@ -668,9 +668,11 @@ class AddCard(QAbstractButton):
 # 各平台自带的等宽字体，放在 tokens 的 CJK 回退之前：没装 JetBrains Mono 时，
 # 不能让 Qt 先选中 PingFang / 微软雅黑这类比例字体（macOS / Windows 上
 # 平台主题给的 FixedFont 可能只是通用名 "monospace"，fontconfig 以外解析不了）。
+# Menlo 排在 SF Mono 前：macOS 上 SF Mono 常常不是可直接按名解析的字体族，
+# 放在前面会让 Qt 先做一次约 67ms 的别名扫描（mac CI 实测）。
 PLATFORM_MONO = (
-    "SF Mono",
     "Menlo",
+    "SF Mono",
     "Monaco",
     "Cascadia Mono",
     "Consolas",

@@ -52,7 +52,7 @@ def test_paste_image_and_urls(qtbot, tmp_path):
     md.setImageData(img)
     c.input.insertFromMimeData(md)
     f = tmp_path / "a.txt"
-    f.write_text("x")
+    f.write_text("x", encoding="utf-8")
     md2 = QMimeData()
     md2.setUrls([QUrl.fromLocalFile(str(f))])
     c.input.insertFromMimeData(md2)

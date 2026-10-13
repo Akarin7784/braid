@@ -43,6 +43,10 @@ jobs:
           for f in tokens.json app_light.qss app_dark.qss; do
             find dist -name "$f" | grep -q . || { echo "缺少 $f"; exit 1; }
           done
+          for d in icons shadows; do
+            n=$(find dist -path "*braid/assets/$d/*.png" | wc -l)
+            [ "$n" -ge 6 ] || { echo "assets/$d 只有 $n 张 png，应至少 6 张"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: braid-${{ runner.os }}

@@ -122,3 +122,87 @@ def test_settings_no_horizontal_scrollbar_or_size_grip(
     # 中栏不能比自身下限窄（否则整列被分割器裁掉）
     center = w.chat_view.parentWidget()
     assert center.width() >= center.minimumSizeHint().width()
+
+
+def test_header_texts(qtbot, tmp_path):
+    from braid.ui.settings_page import PAGE_SUBTITLE, PAGE_TITLE
+
+    page, _ = _page(qtbot, tmp_path)
+    assert page.models.title.text() == PAGE_TITLE == "模型与服务"
+    assert page.models.subtitle.text() == PAGE_SUBTITLE
+    assert page.models.title.objectName() == "settingsTitle"
+    assert page.models.subtitle.objectName() == "settingsSubtitle"
+
+
+def test_add_card_size_and_empty_state(qtbot, tmp_path):
+    page, _ = _page(qtbot, tmp_path)
+    page.resize(900, 700)
+    page.show()
+    qtbot.waitExposed(page)
+    m = page.models
+    assert not m.empty.isHidden()
+    m.add_provider()
+    qtbot.wait(10)
+    assert m.empty.isHidden()
+    card = m.cards()[0]
+    assert m.add_card.height() == 64
+    assert m.add_card.width() == card.width()
+    card.store.remove(card.provider.id)
+    m.rebuild()
+    assert not m.empty.isHidden()
+
+
+def test_overlay_scrollbar_hidden_when_idle(qtbot, tmp_path):
+    from PySide6.QtWidgets import QSizeGrip  # noqa: F401
+
+    store = ProviderStore(tmp_path / "p.json")
+    for i in range(8):
+        store.upsert(Provider(name=f"P{i}"))
+    page = SettingsPage(store)
+    qtbot.addWidget(page)
+    page.resize(900, 400)
+    page.show()
+    qtbot.waitExposed(page)
+    area = page.scroll_area
+    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert area.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    bar = page.vbar
+    assert bar.width() == 6
+    assert bar.idle_timer.parent() is bar
+    assert bar.isHidden()
+    assert bar.maximum() > 0
+    area.verticalScrollBar().setValue(50)
+    assert bar.isVisible()
+    assert bar.value() == 50
+    bar.idle_timer.setInterval(20)
+    bar.idle_timer.start()
+    qtbot.waitUntil(bar.isHidden, timeout=1000)
+
+
+def test_nav_selection_uses_row_sel():
+    from braid.theme import load_qss
+    from braid.theme.palette import tokens
+
+    for theme, dark in (("light", False), ("dark", True)):
+        qss = load_qss(theme)
+        line = next(x for x in qss.splitlines() if x.startswith("#settingsNav::item:selected"))
+        assert tokens(dark)["row_sel"] in line
+        assert tokens(dark)["active"] not in line
+
+
+def test_title_weight_needs_real_cjk_face(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtGui import QFont, QFontDatabase
+
+    from braid.ui import settings_page as sp
+
+    page, _ = _page(qtbot, tmp_path)
+    f = page.models.title.font()
+    assert f.pixelSize() == 18
+    assert f.weight() == sp.title_weight(f)
+    monkeypatch.setattr(sp, "resolved_cjk_family", lambda _f: "X")
+    monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular"]))
+    assert sp.title_weight(f) == QFont.Weight.Normal
+    monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular", "Bold"]))
+    assert sp.title_weight(f) == QFont.Weight.DemiBold
+    monkeypatch.setattr(sp, "resolved_cjk_family", lambda _f: None)
+    assert sp.title_weight(f) == QFont.Weight.Normal

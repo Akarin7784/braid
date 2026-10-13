@@ -120,7 +120,11 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 /* 设置页：模型与服务 */
 #settingsNav { background: transparent; border: none; padding: 8px; }
 #settingsNav::item { color: ${text2}; padding: 0 12px; min-height: 32px; border-radius: 8px; }
-#settingsNav::item:selected { background: ${active}; color: ${text}; }
+#settingsNav::item:selected { background: ${row_sel}; color: ${text}; }
+#settingsNav::item:hover:!selected { background: ${row_sel}; }
+#settingsTitle { font-size: 18px; color: ${text}; }
+#settingsSubtitle { font-size: 13px; color: ${text2}; }
+#settingsEmpty { font-size: 13px; color: ${text3}; }
 #providerName { font-size: 14px; font-weight: 600; }
 QLineEdit#settingsField { background: ${control}; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
 QLineEdit#settingsField:focus { background: ${surface}; border: 1px solid ${sel}; }

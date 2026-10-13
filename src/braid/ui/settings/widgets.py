@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Sequence
 from importlib.resources import files
@@ -22,6 +23,7 @@ from PySide6.QtGui import (
     QPaintEvent,
     QPen,
     QResizeEvent,
+    QTextLayout,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -50,7 +52,6 @@ COMBO_ARROW, COMBO_ARROW_RIGHT, POPUP_RADIUS = 12, 10, 10
 BAR_W, BAR_IDLE_MS, BAR_ALPHA = 6, 800, 0.4
 
 CJK_FALLBACK = ("PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC")
-_HEAVY_STYLES = ("semibold", "demibold", "medium", "bold")
 
 
 def resolved_cjk_family(font: QFont) -> str | None:
@@ -62,15 +63,130 @@ def resolved_cjk_family(font: QFont) -> str | None:
     return None
 
 
-def title_weight(font: QFont) -> QFont.Weight:
-    """中文字体有真实的 Semibold/Medium/Bold 字面才用 600，否则 Normal，避免合成粗体。"""
+def _style_weight(style: str) -> int | None:
+    """字面样式名 → 字重；只识别标题可能用到的 Medium/SemiBold/Bold。"""
+    st = style.lower().replace(" ", "").replace("-", "")
+    if "semibold" in st or "demibold" in st:
+        return 600
+    if "medium" in st:
+        return 500
+    if st == "bold" or (st.endswith("bold") and not st.startswith(("extra", "ultra"))):
+        return 700
+    return None
+
+
+_TITLE_ORDER = (600, 500, 700)
+_WEIGHT_ENUM = {
+    400: QFont.Weight.Normal,
+    500: QFont.Weight.Medium,
+    600: QFont.Weight.DemiBold,
+    700: QFont.Weight.Bold,
+}
+TITLE_SAMPLE = "模型与服务"
+
+
+def title_faces(font: QFont) -> list[tuple[str, str, int]]:
+    """中文字体里可用作标题的真实字面 [(族, 实际样式名, 字重)]，按 600 > 500 > 700 排序。
+
+    样式名取自 QFontDatabase.styles()，不写死（Inter 叫 SemiBold，PingFang 叫 Semibold）。
+    """
     fam = resolved_cjk_family(font)
     if fam is None:
-        return QFont.Weight.Normal
-    styles = [s.lower().replace(" ", "") for s in QFontDatabase.styles(fam)]
-    if any(h in st for st in styles for h in _HEAVY_STYLES):
-        return QFont.Weight.DemiBold
-    return QFont.Weight.Normal
+        return []
+    found: dict[int, str] = {}
+    for st in QFontDatabase.styles(fam):
+        w = _style_weight(st)
+        if w is not None and w not in found:
+            found[w] = st
+    return [(fam, found[w], w) for w in _TITLE_ORDER if w in found]
+
+
+def title_weight(font: QFont) -> QFont.Weight:
+    """标题计划用的字重：SemiBold(600) > Medium(500) > 仅有 Bold 时 700 > Normal(400)。
+
+    只看字体库里存在的真实字面，禁止合成粗体；实际字体用 title_font() 构造。
+    """
+    faces = title_faces(font)
+    return _WEIGHT_ENUM[faces[0][2]] if faces else QFont.Weight.Normal
+
+
+def cjk_faces(font: QFont, text: str = TITLE_SAMPLE) -> list[tuple[str, str]]:
+    """用 glyphRuns 查 text 实际落到的 [(族, 字面样式名)]。"""
+    lay = QTextLayout(text, font)
+    lay.beginLayout()
+    lay.createLine().setLineWidth(100000)
+    lay.endLayout()
+    return [(r.rawFont().familyName(), r.rawFont().styleName()) for r in lay.glyphRuns()]
+
+
+def _same_face(got_fam: str, got_style: str, fam: str, style: str, w: int) -> bool:
+    """glyphRuns 落到的字面是否就是 (fam, style)。
+
+    Linux fontconfig 会把非 Regular/Bold 的字面按 typographic 名报成独立族
+    （如 "Noto Sans CJK SC Medium"），它与 "Noto Sans CJK SC" + Medium 是同一个真实字面。
+    """
+    if _style_weight(got_style) != w:
+        return False
+    return got_fam == fam or got_fam == f"{fam} {style}"
+
+
+def _title_attempt(families: list[str], px: int, w: int, style: str) -> QFont:
+    f = QFont()
+    f.setFamilies(families)
+    f.setPixelSize(px)
+    f.setWeight(_WEIGHT_ENUM[w])
+    if style:
+        f.setStyleName(style)
+    return f
+
+
+@functools.lru_cache(maxsize=32)
+def _title_spec(
+    latin: tuple[str, ...], faces: tuple[tuple[str, str, int], ...], px: int
+) -> tuple[tuple[str, ...], int, str]:
+    """标题字体方案 (族链, 字重, 样式名)。
+
+    按进程缓存：glyphRuns 探测较贵，设置页每个分区标题都会调。
+
+    每档候选依次尝试：
+    1. 族链 [Inter, 中文族] 只设字重 → 再加样式名；
+    2. 降级：只用中文族（拉丁字母随之用中文字体自带的拉丁字形）。
+       Qt 的回落引擎沿用首选族的实际字重：随包 Inter 只有 Regular/SemiBold，
+       请求 500 时 Inter 解析成 Regular，中文回落随之也是 Regular；请求 600 时
+       Inter 为 SemiBold，fontconfig 给没有 SemiBold 的 Noto CJK 配到 Bold。
+       所以族链永远选不上 Noto 的 Medium，只能单用中文族。
+    用 glyphRuns 验证中文确实落到那个真实字面；都不行降到下一档，最后用常规字重。
+    """
+    for fam, style, w in faces:
+        for fams in ([*latin, fam], [fam]):
+            for st in ("", style):
+                got = cjk_faces(_title_attempt(fams, px, w, st))
+                if got and all(_same_face(gf, gs, fam, style, w) for gf, gs in got):
+                    return tuple(fams), w, st
+    return tuple([*latin, faces[0][0]] if faces else []), 400, ""
+
+
+def title_font(base: QFont, px: int) -> QFont:
+    """构造标题字体：拉丁字母走 base 的首选族（Inter），中文用 title_faces() 选中的真实字面。
+
+    规则见 _title_spec()；族链选不上时降级为只用中文族，此时 title_degraded() 为真。
+    """
+    latin = tuple([f for f in base.families() if f not in CJK_FALLBACK][:1] or ["Inter"])
+    fams, w, st = _title_spec(latin, tuple(title_faces(base)), px)
+    f = QFont(base)
+    if fams:
+        f.setFamilies(list(fams))
+    f.setPixelSize(px)
+    f.setWeight(_WEIGHT_ENUM[w])
+    if st:
+        f.setStyleName(st)
+    return f
+
+
+def title_degraded(font: QFont) -> bool:
+    """title_font() 结果是否走了降级（族链里没有拉丁族，标题拉丁字母用中文字体的字形）。"""
+    fams = font.families()
+    return bool(fams) and all(f in CJK_FALLBACK for f in fams)
 
 
 def _over(base: QColor, top: QColor, alpha: float) -> QColor:
@@ -261,10 +377,7 @@ class PageHeader(QWidget):
         super().__init__(parent)
         self.title = QLabel(title, self)
         self.title.setObjectName("settingsTitle")
-        tf = QFont(self.title.font())
-        tf.setPixelSize(18)
-        tf.setWeight(title_weight(tf))
-        self.title.setFont(tf)
+        self.title.setFont(title_font(self.title.font(), 18))
         self.subtitle = QLabel(subtitle, self)
         self.subtitle.setObjectName("settingsSubtitle")
         self.subtitle.setWordWrap(True)

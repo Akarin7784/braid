@@ -433,7 +433,7 @@ def test_row_labels_regular_weight(qtbot, tmp_path, theme):
     from braid.ui.settings.widgets import title_weight
 
     t = page.models.header.title.font()
-    assert t.weight() == title_weight(t)
+    assert t.weight() <= title_weight(t)
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])

@@ -33,6 +33,7 @@ jobs:
           import glob, zipfile
           names = zipfile.ZipFile(glob.glob("wheel_dist/braid-*.whl")[0]).namelist()
           need = {"braid/theme/tokens.json", "braid/theme/app_light.qss", "braid/theme/app_dark.qss"}
+          need |= {f"braid/assets/fonts/{f}" for f in ("Inter-Regular.ttf", "Inter-SemiBold.ttf", "OFL.txt")}
           miss = need - set(names)
           for d in ("icons", "shadows"):
               n = sum(1 for x in names if x.startswith(f"braid/assets/{d}/") and x.endswith(".png"))
@@ -88,6 +89,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
       - run: pip install -e ".[dev]"
       - run: pytest -q
+      - name: 字体回落报告（mac/win 用原生平台插件）
+        if: runner.os != 'Linux'
+        shell: bash
+        env: {QT_QPA_PLATFORM: ""}
+        run: python benchmarks/fonts.py fonts-${{ runner.os }}.txt
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os != 'Linux'
+        with:
+          name: fonts-${{ runner.os }}
+          path: fonts-${{ runner.os }}.txt
+          if-no-files-found: ignore
 
   package:
     # PyInstaller 打包只在合进 main 之后跑
@@ -108,11 +120,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
       - run: pip install -e ".[dev]"
       - run: pyinstaller --noconfirm packaging/braid.spec
-      - name: 检查包内资源（tokens、QSS、图标）
+      - name: 检查包内资源（tokens、QSS、图标、字体）
         shell: bash
         run: |
           for f in tokens.json app_light.qss app_dark.qss; do
             find dist -name "$f" | grep -q . || { echo "缺少 $f"; exit 1; }
+          done
+          for f in Inter-Regular.ttf Inter-SemiBold.ttf OFL.txt; do
+            find dist -path "*braid/assets/fonts/$f" | grep -q . || { echo "缺少 assets/fonts/$f"; exit 1; }
           done
           for d in icons shadows; do
             n=$(find dist -path "*braid/assets/$d/*.png" | wc -l)
@@ -157,6 +172,15 @@ jobs:
       - name: 截设计走查图
         env: {QT_QPA_PLATFORM: xcb}
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python benchmarks/shots.py shots
+      - name: 字体回落报告（xcb）
+        env: {QT_QPA_PLATFORM: xcb}
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" python benchmarks/fonts.py fonts-Linux.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fonts-Linux
+          path: fonts-Linux.txt
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:

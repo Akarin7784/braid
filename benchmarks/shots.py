@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from braid.backends.mock import MockBackend
 from braid.theme import load_qss
+from braid.theme.fonts import apply_app_font
 from braid.theme.menu import ChipButton
 from braid.ui.main_window import MainWindow
 
@@ -104,6 +105,7 @@ def run(app: QApplication, theme: str) -> None:
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     app = QApplication(sys.argv)
+    apply_app_font(app)
     for theme in ("light", "dark"):
         run(app, theme)
     names = ("main_panel_open", "main_panel_closed", "chip", "menu", "sidebar", "settings")

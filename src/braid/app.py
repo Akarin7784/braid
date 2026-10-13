@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 
 from braid.backends.mock import MockBackend
 from braid.theme import load_qss
+from braid.theme.fonts import apply_app_font
 from braid.ui.main_window import MainWindow
 from braid.ui.tray import Tray
 
@@ -14,6 +15,7 @@ def _qss(theme: str) -> str:
 
 def main() -> int:
     app = QApplication(sys.argv)
+    apply_app_font(app)
     theme = "dark" if "--dark" in sys.argv else "light"
     app.setProperty("braidDark", theme == "dark")
     app.setStyleSheet(_qss(theme))

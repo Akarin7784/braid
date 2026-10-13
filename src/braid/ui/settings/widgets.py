@@ -7,18 +7,22 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QEvent, QObject, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
+    QAction,
     QColor,
+    QEnterEvent,
     QFont,
     QFontDatabase,
     QIntValidator,
     QMouseEvent,
     QPainter,
     QPaintEvent,
+    QPen,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -29,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from braid.theme.menu import is_dark
+from braid.theme.menu import SHADOW_MARGIN, RoundedMenu, is_dark
 from braid.theme.nine_slice import NineSliceShadow
 from braid.theme.palette import qcolor
 
@@ -38,6 +42,8 @@ CARD_RADIUS = 12
 CARD_PAD_H, CARD_PAD_V = 16, 2
 SWITCH_W, SWITCH_H = 32, 18
 SEG_H, SEG_PAD, SEG_RADIUS = 28, 2, 8
+NUMBER_W = 64
+COMBO_ARROW, COMBO_ARROW_RIGHT, POPUP_RADIUS = 12, 10, 10
 BAR_W, BAR_IDLE_MS, BAR_ALPHA = 6, 800, 0.4
 
 CJK_FALLBACK = ("PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC")
@@ -117,7 +123,7 @@ class ToggleSwitch(QAbstractButton):
 
 
 class SegmentedControl(QWidget):
-    """分段选择：底色 control，选中段 surface + e1 阴影。值用 key，显示用 label。"""
+    """分段选择：底色 control；选中块浅色 surface + e1、深色 row_sel；文字常规字重。"""
 
     changed = Signal(str)
 
@@ -153,6 +159,11 @@ class SegmentedControl(QWidget):
         if emit:
             self.changed.emit(key)
 
+    @staticmethod
+    def block_color(dark: bool) -> QColor:
+        """选中块：浅色 surface（另加 e1 阴影），深色 row_sel（无阴影）。"""
+        return qcolor("row_sel" if dark else "surface", dark)
+
     def segment_rect(self, i: int) -> QRect:
         return QRect(SEG_PAD + i * self._seg_w, SEG_PAD, self._seg_w, self.height() - 2 * SEG_PAD)
 
@@ -170,9 +181,13 @@ class SegmentedControl(QWidget):
         p.setBrush(qcolor("control", dark))
         p.drawRoundedRect(QRectF(self.rect()), SEG_RADIUS, SEG_RADIUS)
         sel = self.segment_rect(self._index)
-        NineSliceShadow.get("e1", dark).paint(p, sel)
-        p.setBrush(qcolor("surface", dark))
+        if not dark:
+            NineSliceShadow.get("e1", dark).paint(p, sel)
+        p.setBrush(self.block_color(dark))
         p.drawRoundedRect(QRectF(sel), SEG_RADIUS - SEG_PAD, SEG_RADIUS - SEG_PAD)
+        f = QFont(self.font())
+        f.setWeight(QFont.Weight.Normal)  # 选中也不加粗，只换色
+        p.setFont(f)
         for i, t in enumerate(self._labels):
             p.setPen(qcolor("text" if i == self._index else "text2", dark))
             p.drawText(self.segment_rect(i), Qt.AlignmentFlag.AlignCenter, t)
@@ -372,6 +387,7 @@ class NumberField(QLineEdit):
         self.setValidator(QIntValidator(lo, hi, self))
         self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.setFixedHeight(28)
+        self.setFixedWidth(NUMBER_W)
         self._value = lo
         self.setValue(value)
         self.editingFinished.connect(self._commit)
@@ -396,3 +412,108 @@ class NumberField(QLineEdit):
     def _commit(self) -> None:
         txt = self.text().strip()
         self.setValue(int(txt) if txt.lstrip("-").isdigit() else self._value)
+
+
+def number_with_unit(field: NumberField, unit: str, parent: QWidget | None = None) -> QWidget:
+    """NumberField 后面跟一个 text3 单位标签（如“秒”）；标签在返回控件的 ``unit`` 属性上。"""
+    box = QWidget(parent)
+    lay = QHBoxLayout(box)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(4)
+    field.setParent(box)
+    lab = QLabel(unit, box)
+    lab.setObjectName("fieldUnit")
+    lay.addWidget(field)
+    lay.addWidget(lab)
+    box.unit = lab  # type: ignore[attr-defined]
+    return box
+
+
+class SettingsCombo(QComboBox):
+    """设置页下拉框：右侧自绘 12px text3 箭头；弹层用 RoundedMenu（圆角 10、e2 阴影、32px 行）。
+
+    接口与 QComboBox 相同（addItem / currentData / currentIndexChanged …）。
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("settingsCombo")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.popup_menu: RoundedMenu | None = None
+
+    def build_popup(self) -> RoundedMenu:
+        menu = RoundedMenu(self)
+        menu.radius = POPUP_RADIUS
+        menu.setProperty("role", "comboPopup")
+        for i in range(self.count()):
+            act = QAction(self.itemText(i), menu)
+            act.setCheckable(True)
+            act.setChecked(i == self.currentIndex())
+            act.triggered.connect(lambda _c=False, j=i: self.setCurrentIndex(j))
+            menu.addAction(act)
+        self.popup_menu = menu
+        return menu
+
+    def showPopup(self) -> None:  # noqa: N802
+        menu = self.build_popup()
+        menu.setMinimumWidth(self.width() + 2 * SHADOW_MARGIN)
+        pos = self.mapToGlobal(self.rect().bottomLeft())
+        pos.setX(pos.x() - SHADOW_MARGIN)
+        pos.setY(pos.y() - SHADOW_MARGIN + 4)
+        menu.exec(pos)
+
+    def hidePopup(self) -> None:  # noqa: N802
+        if self.popup_menu is not None:
+            self.popup_menu.close()
+
+    def arrow_rect(self) -> QRect:
+        s = COMBO_ARROW
+        return QRect(self.width() - COMBO_ARROW_RIGHT - s, (self.height() - s) // 2, s, s)
+
+    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(e)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(qcolor("text3", is_dark()), 1.3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        c = QRectF(self.arrow_rect()).center()
+        pts = [QPointF(c.x() - 3.5, c.y() - 1.75), QPointF(c.x(), c.y() + 1.75)]
+        p.drawPolyline([*pts, QPointF(c.x() + 3.5, c.y() - 1.75)])
+
+
+class CloseIconButton(QAbstractButton):
+    """16px × 图标按钮：平时 text3，悬停 danger。"""
+
+    SIZE = 16
+
+    def __init__(self, parent: QWidget | None = None, tip: str = "删除") -> None:
+        super().__init__(parent)
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setToolTip(tip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.hovered = False
+
+    def icon_color(self) -> QColor:
+        return qcolor("danger" if self.hovered else "text3", is_dark())
+
+    def enterEvent(self, e: QEnterEvent) -> None:  # noqa: N802
+        self.hovered = True
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e: QEvent) -> None:  # noqa: N802
+        self.hovered = False
+        self.update()
+        super().leaveEvent(e)
+
+    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self.icon_color(), 1.4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        a, b = 4.5, self.SIZE - 4.5
+        p.drawLine(QPointF(a, a), QPointF(b, b))
+        p.drawLine(QPointF(a, b), QPointF(b, a))

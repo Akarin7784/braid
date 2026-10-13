@@ -129,6 +129,14 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingLabel { color: ${text}; }
 #settingCardTitle { color: ${text2}; font-size: 12px; }
 #fieldLabel { color: ${text2}; font-size: 12px; }
+#fieldUnit { color: ${text3}; font-size: 12px; }
+QComboBox#settingsCombo { padding-right: 28px; }
+QComboBox#settingsCombo::drop-down { width: 0; border: none; }
+QComboBox#settingsCombo::down-arrow { image: none; width: 0; height: 0; }
+QMenu[role="comboPopup"]::item { padding: 7px 16px 7px 12px; min-width: 0; }
+QMenu[role="comboPopup"]::item:checked { background: ${row_sel}; font-weight: normal; }
+QMenu[role="comboPopup"]::item:selected { background: ${hover}; }
+QMenu[role="comboPopup"]::indicator { width: 0; height: 0; }
 QToolButton#textButton { background: transparent; color: ${text2}; border: none; padding: 4px 6px; border-radius: 6px; }
 QToolButton#textButton:hover { background: ${hover}; color: ${text}; }
 QToolButton#textButton:disabled { color: ${text3}; }

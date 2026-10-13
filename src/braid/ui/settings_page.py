@@ -19,7 +19,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
-    QComboBox,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
@@ -47,8 +46,10 @@ from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
     OverlayScrollBar,
     PageHeader,
     SettingCard,
+    SettingsCombo,
     ToggleSwitch,
     make_scroll,
+    number_with_unit,
     resolved_cjk_family,
     title_weight,
 )
@@ -56,7 +57,6 @@ from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
 SIDE_W, CONTENT_MAX, CONTENT_PAD = 180, 640, 24
 CARD_RADIUS, CARD_PAD, CARD_GAP, FIELD_H = 12, 16, 12, 32
 CARD_INNER_GAP = 6
-SPIN_W = 56
 TEST_DELAY_MS = 400
 SAVED_TEXT = "已保存到系统钥匙串"
 PAGE_TITLE = "模型与服务"
@@ -215,7 +215,7 @@ class ProviderCard(QWidget):
             lab = QLabel(text, self)
             lab.setObjectName("fieldLabel")
             foot.addWidget(lab)
-            foot.addWidget(w)
+            foot.addWidget(number_with_unit(w, "秒", self))
             foot.addSpacing(6)
         foot.addStretch(1)
         foot.addWidget(self.test_result)
@@ -225,7 +225,6 @@ class ProviderCard(QWidget):
     def _spin(self, value: int, lo: int, hi: int, tip: str) -> NumberField:
         sb = NumberField(int(value), lo, hi, parent=self)
         sb.setToolTip(tip)
-        sb.setFixedWidth(SPIN_W)
         return sb
 
     def _conf(self) -> dict[str, Any]:
@@ -354,11 +353,10 @@ class ModelsPage(QWidget):
         self.add_card.clicked.connect(self.add_provider)
         self.rebuild()
 
-    def _combo(self, field: str) -> QComboBox:
-        cb = QComboBox(self)
-        cb.setObjectName("settingsCombo")
+    def _combo(self, field: str) -> SettingsCombo:
+        cb = SettingsCombo(self)
         cb.setMinimumWidth(60)
-        cb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        cb.setSizeAdjustPolicy(SettingsCombo.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         cb.setMinimumContentsLength(8)
         if self.backend is not None:
             for m in self.backend.list_models():

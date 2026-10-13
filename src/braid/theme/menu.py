@@ -34,6 +34,7 @@ def is_dark() -> bool:
 
 
 class RoundedMenu(QMenu):
+    radius: int = RADIUS  # 实例可覆盖（下拉框弹层用 10）
     _surface = "#FFFFFF"
 
     def _get_surface(self) -> str:
@@ -83,7 +84,7 @@ class RoundedMenu(QMenu):
         NineSliceShadow.get("e2", is_dark()).paint(p, card)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(self._surface))
-        p.drawRoundedRect(card, RADIUS, RADIUS)
+        p.drawRoundedRect(card, self.radius, self.radius)
         p.end()
         super().paintEvent(e)
 

@@ -14,7 +14,6 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLineEdit,
     QToolButton,
@@ -23,7 +22,15 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import AgentBackend
-from braid.ui.settings.widgets import NumberField, PageHeader, SegmentedControl, SettingCard
+from braid.ui.settings.widgets import (
+    CloseIconButton,
+    NumberField,
+    PageHeader,
+    SegmentedControl,
+    SettingCard,
+    SettingsCombo,
+    number_with_unit,
+)
 
 # 左栏顺序；key 即 AgentBackend 配置分区名
 NAV: tuple[tuple[str, str], ...] = (
@@ -89,10 +96,7 @@ class BashRuleRow(QWidget):
         self.pattern.setFixedHeight(28)
         self.pattern.setMinimumWidth(60)
         self.action = SegmentedControl(PERMISSION_OPTIONS, action, self)
-        self.remove = QToolButton(self)
-        self.remove.setObjectName("textButton")
-        self.remove.setText("删除")
-        self.remove.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.remove = CloseIconButton(self, "删除规则")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
@@ -179,8 +183,7 @@ class GeneralPage(SectionPage):
         self.theme = SegmentedControl(THEME_OPTIONS, conf.get("theme", "system"), self)
         self.theme.changed.connect(lambda v: self._set(theme=v))
         card.add_row("主题", self.theme)
-        self.language = QComboBox(self)
-        self.language.setObjectName("settingsCombo")
+        self.language = SettingsCombo(self)
         for code, name in LANGUAGES:
             self.language.addItem(name, code)
         self.language.setCurrentIndex(max(0, self.language.findData(conf.get("language"))))
@@ -189,9 +192,8 @@ class GeneralPage(SectionPage):
         )
         card.add_row("界面语言", self.language)
         self.font_size = NumberField(int(conf.get("font_size", 14)), 11, 22, parent=self)
-        self.font_size.setFixedWidth(56)
         self.font_size.valueChanged.connect(lambda v: self._set(font_size=v))
-        card.add_row("正文字号", self.font_size)
+        card.add_row("正文字号", number_with_unit(self.font_size, "px", self))
         self.autoupdate = SegmentedControl(UPDATE_OPTIONS, conf.get("autoupdate", "notify"), self)
         self.autoupdate.changed.connect(lambda v: self._set(autoupdate=v))
         card.add_row("自动更新", self.autoupdate)

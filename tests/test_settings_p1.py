@@ -315,3 +315,88 @@ def test_every_page_fits_800(qtbot, tmp_path, monkeypatch, theme):
             assert sc.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
     finally:
         app.setProperty("braidDark", False)
+
+
+# ---- 设计走查 5 项 ----
+
+
+def test_number_field_unit(qtbot):
+    from braid.theme import load_qss
+    from braid.ui.settings.widgets import number_with_unit
+
+    f = NumberField(30, 1, 600)
+    box = number_with_unit(f, "秒")
+    qtbot.addWidget(box)
+    box.setStyleSheet(load_qss("light"))
+    box.show()
+    assert f.width() == 64
+    assert f.alignment() & Qt.AlignmentFlag.AlignRight
+    assert box.unit.text() == "秒" and box.unit.objectName() == "fieldUnit"
+    assert box.unit.mapTo(box, QPoint(0, 0)).x() > f.mapTo(box, QPoint(0, 0)).x()
+    line = next(x for x in load_qss("light").splitlines() if x.startswith("#fieldUnit"))
+    from braid.theme.palette import tokens
+
+    assert tokens(False)["text3"] in line
+
+
+def test_provider_card_units_and_result_left(qtbot, tmp_path):
+    page, _ = _settings(qtbot, tmp_path, 1)
+    page.resize(900, 760)
+    page.show()
+    qtbot.waitExposed(page)
+    card = page.models.cards()[0]
+    for f in (card.timeout, card.chunk_timeout):
+        assert f.width() == 64
+        assert f.parentWidget().unit.text() == "秒"
+    card.test_connection()
+    qtbot.waitUntil(lambda: card.test_btn.isEnabled(), timeout=2000)
+    assert card.test_result.text() == "已连接 · 320ms"
+    rx = card.test_result.mapTo(card, QPoint(0, 0)).x() + card.test_result.width()
+    assert rx <= card.test_btn.mapTo(card, QPoint(0, 0)).x()
+
+
+def test_settings_combo_popup(qtbot, tmp_path):
+    from braid.theme.menu import RoundedMenu
+    from braid.ui.settings.widgets import SettingsCombo
+
+    page, _ = _settings(qtbot, tmp_path)
+    cb = page.models.model_combo
+    assert isinstance(cb, SettingsCombo)
+    assert cb.arrow_rect().width() == 12
+    assert cb.arrow_rect().right() < cb.width()
+    menu = cb.build_popup()
+    assert isinstance(menu, RoundedMenu) and menu.radius == 10
+    assert menu.property("role") == "comboPopup"
+    acts = menu.actions()
+    assert [a.text() for a in acts] == [cb.itemText(i) for i in range(cb.count())]
+    assert [a.isChecked() for a in acts].index(True) == cb.currentIndex()
+    acts[2].trigger()
+    assert cb.currentIndex() == 2
+    from braid.theme import load_qss
+    from braid.theme.palette import tokens
+
+    for theme, dark in (("light", False), ("dark", True)):
+        qss = load_qss(theme)
+        line = next(x for x in qss.splitlines() if 'comboPopup"]::item:checked' in x)
+        assert tokens(dark)["row_sel"] in line
+
+
+def test_segmented_block_per_theme():
+    from braid.theme.palette import qcolor
+
+    assert SegmentedControl.block_color(False) == qcolor("surface", False)
+    assert SegmentedControl.block_color(True) == qcolor("row_sel", True)
+
+
+def test_bash_rule_delete_icon(qtbot, tmp_path):
+    from braid.theme.palette import qcolor
+    from braid.ui.settings.widgets import CloseIconButton
+
+    page, b = _settings(qtbot, tmp_path)
+    row = page.pages["permissions"].rules()[0]
+    assert isinstance(row.remove, CloseIconButton) and row.remove.size().width() == 16
+    assert row.remove.icon_color() == qcolor("text3")
+    row.remove.hovered = True
+    assert row.remove.icon_color() == qcolor("danger")
+    row.remove.click()
+    assert len(b.get_config("permissions")["bash_rules"]) == 1

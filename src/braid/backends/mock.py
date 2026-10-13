@@ -128,5 +128,5 @@ class MockBackend(AgentBackend):
     def test_connection(self, provider_id: str, base_url: str) -> ConnectionResult:
         """演示：endpoint 以 http 开头算成功，否则失败。"""
         if base_url.strip().startswith(("http://", "https://")):
-            return ConnectionResult(True, "连接正常 · 128ms")
-        return ConnectionResult(False, "端点无效")
+            return ConnectionResult(True, "已连接 · 320ms")
+        return ConnectionResult(False, "连接失败 · 端点无效")

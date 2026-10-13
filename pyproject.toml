@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 [tool.setuptools.package-data]
-"braid.theme" = ["*.qss"]
+"braid.theme" = ["*.qss", "tokens.json"]
 "braid.assets" = ["*.png", "*.svg"]
 "braid.assets.shadows" = ["*.png"]
 "braid.assets.icons" = ["*.png"]

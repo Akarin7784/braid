@@ -89,7 +89,7 @@ def test_model_without_reasoning_has_no_submenu(qtbot):
     act = c._model_actions["c"]
     assert act.menu() is None
     act.trigger()
-    assert (c.model_id, c.reasoning) == ("c", "") and c.model_chip.text() == "Model C"
+    assert (c.model_id, c.reasoning) == ("c", None) and c.model_chip.text() == "Model C"
 
 
 def test_provider_headers(qtbot):

@@ -104,8 +104,18 @@ class ModelMenu(RoundedMenu):
     def __init__(self, title: str | QWidget | None = None, parent: QWidget | None = None) -> None:
         super().__init__(title, parent)
         self.setProperty("role", "modelMenu")
+        # 菜单项一律常规字重（400）；QSS 里 modelMenu 的 ::item 也写了 font-weight: normal
+        f = self.font()
+        f.setWeight(QFont.Weight.Normal)
+        self.setFont(f)
         self.style().unpolish(self)
         self.style().polish(self)
+
+    ARROW_SLOT = 30  # 每行都给子菜单箭头留位，有无箭头的行标签右缘对齐
+
+    def tag_right(self, action: QAction) -> int:
+        """右侧标签的右缘 x：所有行一致（不看这一行有没有子菜单箭头）。"""
+        return self.actionGeometry(action).right() - self.ARROW_SLOT
 
     @staticmethod
     def describe(action: QAction, desc: str, tag: str = "") -> None:
@@ -130,7 +140,7 @@ class ModelMenu(RoundedMenu):
             if not desc and not tag:
                 continue
             r = self.actionGeometry(a)
-            right = r.right() - (30 if a.menu() else 12)
+            right = self.tag_right(a)
             if tag:
                 p.setFont(tf)
                 fm = p.fontMetrics()

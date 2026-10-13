@@ -17,6 +17,7 @@ def main() -> int:
     theme = "dark" if "--dark" in sys.argv else "light"
     app.setStyleSheet(_qss(theme))
     w = MainWindow(MockBackend())
+    w.chat_view.set_dark(theme == "dark")
     w.show()
     tray = Tray(w)
     tray.show()

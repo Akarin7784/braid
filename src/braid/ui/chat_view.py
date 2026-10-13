@@ -23,10 +23,12 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
+    QAbstractTextDocumentLayout,
     QColor,
     QGuiApplication,
     QMouseEvent,
     QPainter,
+    QPalette,
     QTextCharFormat,
     QTextCursor,
     QTextDocument,
@@ -44,6 +46,11 @@ MAX_WIDTH = 680  # 对话列最大宽度（设计偏差 B），居中
 PAD = 12
 ACTION_H = 24
 THROTTLE_MS = 50
+# 与 QSS 中 `*` 文字色、userBubble 底色保持一致（tokens.json）
+THEME = {
+    False: {"text": "#1F1F1E", "bubble": "#EFEFEE"},
+    True: {"text": "#ECECEA", "bubble": "#2F2F2E"},
+}
 
 
 @dataclass
@@ -293,10 +300,12 @@ class ChatDelegate(QStyledItemDelegate):
         pal = option.palette
         if item.role == "user":
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(pal.alternateBase())
+            painter.setBrush(QColor(THEME[self.dark]["bubble"]))
             painter.drawRoundedRect(bubble, 12, 12)
         painter.translate(bubble.x() + PAD, bubble.y() + PAD)
-        doc.drawContents(painter)
+        ctx = QAbstractTextDocumentLayout.PaintContext()
+        ctx.palette.setColor(QPalette.ColorRole.Text, QColor(THEME[self.dark]["text"]))
+        doc.documentLayout().draw(painter, ctx)
         painter.restore()
         if item.streaming:
             painter.fillRect(

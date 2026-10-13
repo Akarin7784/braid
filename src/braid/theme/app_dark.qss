@@ -132,6 +132,17 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingCardTitle { color: #A3A3A0; font-size: 12px; }
 #fieldLabel { color: #A3A3A0; font-size: 12px; }
 #fieldUnit { color: #73736F; font-size: 12px; }
+#agentName { color: #ECECEA; font-weight: normal; }
+#agentDesc { color: #A3A3A0; font-size: 12px; }
+#agentModel { color: #73736F; font-size: 12px; }
+#agentTag { background: #30302F; color: #A3A3A0; font-size: 11px; border-radius: 6px; padding: 0 6px; }
+QToolButton#toolChip { background: #30302F; color: #A3A3A0; border: none; border-radius: 12px; padding: 3px 10px; font-size: 12px; }
+QToolButton#toolChip:checked { background: #3A3A39; color: #ECECEA; }
+QToolButton#toolChip:hover { color: #ECECEA; }
+QPlainTextEdit#promptEdit { background: #30302F; border: 1.5px solid transparent; border-radius: 8px; padding: 6px 8px; }
+QPlainTextEdit#promptEdit:focus { border-color: #D97757; }
+#instructionPath { color: #ECECEA; }
+#matchCount { color: #73736F; font-size: 12px; }
 QComboBox#settingsCombo { padding-right: 28px; }
 QComboBox#settingsCombo::drop-down { width: 0; border: none; }
 QComboBox#settingsCombo::down-arrow { image: none; width: 0; height: 0; }

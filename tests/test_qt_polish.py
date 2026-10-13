@@ -71,6 +71,9 @@ def test_composer_max_width_centered(win, qtbot):
     win.set_panel_open(False, animate=False)
     qtbot.wait(20)
     c = win.composer
+    from braid.ui import chat_view
+
+    assert COMPOSER_MAX_W == chat_view.MAX_WIDTH == 680
     assert c.maximumWidth() == COMPOSER_MAX_W
     assert c.width() == COMPOSER_MAX_W
     area = c.parentWidget()
@@ -126,3 +129,29 @@ def test_model_chip_text_not_elided(win):
     fm = chip.fontMetrics()
     avail = chip.width() - chip.PAD_LEFT - chip._reserved()
     assert fm.horizontalAdvance(chip.text()) < avail
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_logo_recolour_keeps_per_stroke_opacity(win, dark):
+    from braid.theme.palette import qcolor
+
+    brand = win.sidebar.brand
+    raw = brand._icon.pixmap(18, 18).toImage()
+    tinted = brand.logo_pixmap(dark).toImage()
+    assert raw.size() == tinted.size()
+    want = qcolor("text", dark)
+    alphas = set()
+    for y in range(raw.height()):
+        for x in range(raw.width()):
+            a0 = raw.pixelColor(x, y).alpha()
+            c = tinted.pixelColor(x, y)
+            assert abs(c.alpha() - a0) <= 1  # 不压平透明度
+            if a0 > 200:
+                got, exp = (c.red(), c.green(), c.blue()), (want.red(), want.green(), want.blue())
+                assert all(abs(g - e) <= 2 for g, e in zip(got, exp, strict=True))  # 预乘取整
+            if a0:
+                alphas.add(a0 // 32)
+    # 三股线 opacity 1 / 0.55 / 0.3：着色后仍有多档 alpha，而不是全部不透明
+    assert len(alphas) >= 3
+    assert any(4 <= b <= 5 for b in alphas)  # 0.55 那股（约 140）
+    assert any(2 <= b <= 3 for b in alphas)  # 0.3 那股（约 77）

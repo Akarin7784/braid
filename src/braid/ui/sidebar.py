@@ -98,6 +98,7 @@ class BrandHeader(QWidget):
         tinted.fill(Qt.GlobalColor.transparent)
         p = QPainter(tinted)
         p.drawPixmap(0, 0, pm)
+        # SourceIn：结果 = text 色 × 原像素 alpha，三股线各自的 opacity 原样保留
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
         p.fillRect(tinted.rect(), _c("text", dark))
         p.end()

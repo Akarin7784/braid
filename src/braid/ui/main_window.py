@@ -36,6 +36,7 @@ from braid.core.backend import AgentBackend, Session
 from braid.core.session_store import SessionStore
 from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
+from braid.ui.chat_view import MAX_WIDTH as CHAT_MAX_W
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
 from braid.ui.icon_button import IconButton
@@ -60,7 +61,7 @@ class DragArea(QWidget):
 
 
 RESIZE_MARGIN = 6  # 无边框窗口四边 / 四角的拖拽调整大小命中宽度（逻辑像素）
-COMPOSER_MAX_W = 760  # 输入框最大宽度，宽窗口下水平居中
+COMPOSER_MAX_W = CHAT_MAX_W  # 输入框与消息列同宽（单一来源 chat_view.MAX_WIDTH），宽窗口下居中
 
 _E = Qt.Edge
 _CURSORS: dict[int, Qt.CursorShape] = {
@@ -225,7 +226,7 @@ class MainWindow(QMainWindow):
         self.chat.busyChanged.connect(composer.set_busy)
         composer.selectionChanged.connect(self._remember_selection)
         self.chat.editRequested.connect(composer.set_text)
-        # 宽窗口（全屏）下输入框最大 760 并水平居中
+        # 宽窗口（全屏）下输入框与消息列同宽并水平居中
         composer.setMaximumWidth(COMPOSER_MAX_W)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)

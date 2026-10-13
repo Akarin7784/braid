@@ -11,13 +11,12 @@ from importlib.resources import files
 from typing import Any
 
 from PySide6.QtCore import (
-    QRect,
     QSize,
     Qt,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QIcon, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -26,7 +25,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QScrollArea,
-    QSizePolicy,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -43,6 +41,7 @@ from braid.ui.settings import mcp as _mcp  # noqa: F401  注册“MCP 服务”�
 from braid.ui.settings.pages import NAV, PAGE_FACTORIES, PlaceholderPage
 from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
     BAR_W,
+    AddCard,
     NumberField,
     OverlayScrollBar,
     PageHeader,
@@ -300,26 +299,12 @@ class ProviderCard(QWidget):
         p.drawRoundedRect(self.rect(), CARD_RADIUS, CARD_RADIUS)
 
 
-class AddProviderCard(QToolButton):
-    """虚线占位卡。"""
+class AddProviderCard(AddCard):
+    """兼容旧名：等同 ``AddCard("+ 添加服务商")``。"""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setText("+ 添加服务商")
+        super().__init__("+ 添加服务商", parent)
         self.setObjectName("addProviderCard")
-        self.setFixedHeight(ADD_CARD_H)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
-        dark = is_dark()
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(qcolor("text3", dark), 1, Qt.PenStyle.DashLine)
-        p.setPen(pen)
-        p.drawRoundedRect(QRect(self.rect()).adjusted(1, 1, -1, -1), CARD_RADIUS, CARD_RADIUS)
-        p.setPen(qcolor("text2", dark))
-        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
 class ModelsPage(QWidget):
@@ -350,7 +335,7 @@ class ModelsPage(QWidget):
         self.model_card.add_row("轻量模型", self.small_combo)
         self.empty = QLabel(EMPTY_TEXT, self)
         self.empty.setObjectName("settingsEmpty")
-        self.add_card = AddProviderCard(self)
+        self.add_card = AddCard("+ 添加服务商", self)
         self.add_card.clicked.connect(self.add_provider)
         self.rebuild()
 

@@ -214,3 +214,7 @@ class GeneralPage(SectionPage):
 
 register_page("permissions", PermissionsPage)
 register_page("general", GeneralPage)
+
+# P2 分区页：模块导入时自行 register_page（放在末尾，避免循环导入）
+from braid.ui.settings import agents as _agents  # noqa: E402, F401
+from braid.ui.settings import rules as _rules  # noqa: E402, F401

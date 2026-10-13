@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+from importlib.resources import files
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -19,6 +21,7 @@ from PySide6.QtGui import (
     QPainter,
     QPaintEvent,
     QPen,
+    QResizeEvent,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -520,3 +523,181 @@ class CloseIconButton(QAbstractButton):
         a, b = 4.5, self.SIZE - 4.5
         p.drawLine(QPointF(a, a), QPointF(b, b))
         p.drawLine(QPointF(a, b), QPointF(b, a))
+
+
+ADD_CARD_H = 64
+
+
+class AddCard(QAbstractButton):
+    """虚线“+ …”占位卡：64px 高、与卡片同宽，点击发 clicked()（服务商 / 智能体 / MCP 共用）。"""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setText(text)
+        self.setObjectName("addCard")
+        self.setFixedHeight(ADD_CARD_H)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self.fontMetrics().horizontalAdvance(self.text()) + 32, ADD_CARD_H)
+
+    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
+        dark = is_dark()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(qcolor("text3", dark), 1, Qt.PenStyle.DashLine))
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), CARD_RADIUS, CARD_RADIUS)
+        p.setPen(qcolor("text2", dark))
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
+
+
+# 各平台自带的等宽字体，放在 tokens 的 CJK 回退之前：没装 JetBrains Mono 时，
+# 不能让 Qt 先选中 PingFang / 微软雅黑这类比例字体（macOS / Windows 上
+# 平台主题给的 FixedFont 可能只是通用名 "monospace"，fontconfig 以外解析不了）。
+PLATFORM_MONO = (
+    "SF Mono",
+    "Menlo",
+    "Monaco",
+    "Cascadia Mono",
+    "Consolas",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Noto Sans Mono",
+    "Courier New",
+)
+
+
+def mono_families() -> list[str]:
+    """等宽字体族的回退顺序。
+
+    tokens.font.mono 的等宽项 → 系统 FixedFont → 平台等宽 → 任意已装等宽 → CJK 回退。
+    """
+    raw = (files("braid.theme") / "tokens.json").read_text(encoding="utf-8")
+    token_list: list[str] = list(json.loads(raw).get("font", {}).get("mono", []))
+    db = set(QFontDatabase.families())
+    head = [f for f in token_list if f in db and QFontDatabase.isFixedPitch(f)]
+    sys_fixed = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont).family()
+    rest = [f for f in token_list if f not in head]
+    # 兜底：上面都没装时，用字体库里任意一款等宽字体，排在比例 CJK 回退之前
+    any_fixed = next((f for f in sorted(db) if QFontDatabase.isFixedPitch(f)), "")
+    out: list[str] = []
+    for f in [*head, sys_fixed, *PLATFORM_MONO, any_fixed, *rest]:
+        if f and f not in out:
+            out.append(f)
+    return out
+
+
+def mono_font(base: QFont | None = None, px: int = 12) -> QFont:
+    """等宽字体（路径、提示词用），按 :func:`mono_families` 的顺序回退。"""
+    f = QFont()
+    f.setFamilies(mono_families())
+    f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setFixedPitch(True)
+    if base is not None:
+        f.setWeight(base.weight())
+    f.setPixelSize(px)
+    return f
+
+
+class ChipMultiSelect(QWidget):
+    """胶囊多选：每项一个可勾选胶囊，选中底色 active。信号 changed(list[str])。"""
+
+    changed = Signal(list)
+
+    def __init__(
+        self,
+        options: Sequence[tuple[str, str]],
+        selected: Sequence[str] = (),
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        from PySide6.QtWidgets import QToolButton
+
+        self._keys = [k for k, _ in options]
+        self.chips: dict[str, QToolButton] = {}
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        for key, label in options:
+            b = QToolButton(self)
+            b.setObjectName("toolChip")
+            b.setText(label)
+            b.setCheckable(True)
+            b.setChecked(key in selected)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.toggled.connect(lambda _on: self.changed.emit(self.selected()))
+            lay.addWidget(b)
+            self.chips[key] = b
+        lay.addStretch(1)
+
+    def selected(self) -> list[str]:
+        return [k for k in self._keys if self.chips[k].isChecked()]
+
+    def set_selected(self, keys: Sequence[str]) -> None:
+        for k, b in self.chips.items():
+            b.blockSignals(True)
+            b.setChecked(k in keys)
+            b.blockSignals(False)
+
+
+class GrowHandle(QWidget):
+    """拖动把手：上下拖改变 target 的高度（不低于 minimum）。"""
+
+    def __init__(self, target: QWidget, minimum: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("growHandle")
+        self.target, self.minimum = target, minimum
+        self.setFixedHeight(10)
+        self.setCursor(Qt.CursorShape.SizeVerCursor)
+        self._y0: float | None = None
+        self._h0 = 0
+
+    def grow_to(self, h: int) -> None:
+        self.target.setFixedHeight(max(self.minimum, h))
+
+    def mousePressEvent(self, e: QMouseEvent) -> None:  # noqa: N802
+        self._y0, self._h0 = e.globalPosition().y(), self.target.height()
+
+    def mouseMoveEvent(self, e: QMouseEvent) -> None:  # noqa: N802
+        if self._y0 is not None:
+            self.grow_to(int(self._h0 + e.globalPosition().y() - self._y0))
+
+    def mouseReleaseEvent(self, e: QMouseEvent) -> None:  # noqa: N802
+        self._y0 = None
+
+    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(qcolor("text3", is_dark()))
+        cx, cy = self.width() / 2, self.height() / 2
+        p.drawRoundedRect(QRectF(cx - 12, cy - 1, 24, 2), 1, 1)
+
+
+class ElidedLabel(QLabel):
+    """单行文字，放不下时中间省略；完整文字在 full_text() 和 tooltip。"""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = text
+        self.setToolTip(text)
+        self.setMinimumWidth(40)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._refit()
+
+    def full_text(self) -> str:
+        return self._full
+
+    def _refit(self) -> None:
+        w = max(10, self.width())
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, w))
+
+    def resizeEvent(self, e: QResizeEvent) -> None:  # noqa: N802
+        self._refit()
+        super().resizeEvent(e)
+
+    def changeEvent(self, e: QEvent) -> None:  # noqa: N802
+        if e.type() == QEvent.Type.FontChange:
+            self._refit()
+        super().changeEvent(e)

@@ -55,7 +55,39 @@ def default_config() -> dict[str, dict[str, Any]]:
             "autoupdate": "notify",  # auto / notify / off
             "shell": "/bin/bash",
         },
-        "agents": {"default_agent": "build", "agents": ["build", "plan"]},
+        "agents": {
+            "default_agent": "build",
+            # 参考 opencode 的 agent 配置：model 为空表示跟随默认模型；tools 为允许的工具
+            "agents": [
+                {
+                    "id": "build",
+                    "name": "构建",
+                    "builtin": True,
+                    "description": "默认智能体，可读写文件、执行命令",
+                    "model": "",
+                    "tools": ["read", "edit", "bash", "webfetch"],
+                    "prompt": "",
+                },
+                {
+                    "id": "plan",
+                    "name": "规划",
+                    "builtin": True,
+                    "description": "只读分析与制定计划，不改动文件",
+                    "model": "",
+                    "tools": ["read", "webfetch"],
+                    "prompt": "",
+                },
+                {
+                    "id": "review",
+                    "name": "代码审查",
+                    "builtin": False,
+                    "description": "审查改动并给出修改建议",
+                    "model": "mock-fast",
+                    "tools": ["read"],
+                    "prompt": "你是严格的代码审查者，只指出问题与改法，不直接改代码。",
+                },
+            ],
+        },
         "mcp": {
             # name -> {type: local/remote, command|url, enabled, status, error?}
             "servers": {
@@ -86,7 +118,10 @@ def default_config() -> dict[str, dict[str, Any]]:
                 },
             },
         },
-        "rules": {"instructions": ["AGENTS.md"]},
+        # 参考 opencode 的 instructions：路径或 glob，相对项目根目录
+        "rules": {
+            "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", ".cursor/rules/**/*.mdc"]
+        },
         "keybinds": {"leader": "ctrl+x", "send": "enter", "newline": "shift+enter"},
         "advanced": {"share": "manual", "snapshot": True, "log_level": "info"},
     }
@@ -159,3 +194,7 @@ class MockBackend(AgentBackend):
         if base_url.strip().startswith(("http://", "https://")):
             return ConnectionResult(True, "已连接 · 320ms")
         return ConnectionResult(False, "连接失败 · 端点无效")
+
+    def count_instruction_matches(self, pattern: str) -> int:
+        """演示：按模式长度给一个稳定的匹配数。"""
+        return 2 + len(pattern) % 5

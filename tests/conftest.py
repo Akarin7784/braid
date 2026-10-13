@@ -1,7 +1,19 @@
 import os
+import sys
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Windows 上 offscreen 平台用 FreeType 字体库，只扫描 QT_QPA_FONTDIR（默认是 Qt 安装目录
+# 下的 lib/fonts，PySide6 的 wheel 里没有），字体库几乎为空，任何字体都解析不到。
+# 测试时指向系统字体目录，让 offscreen 和真实 windows 平台看到同一批字体。
+if (
+    sys.platform == "win32"
+    and os.environ["QT_QPA_PLATFORM"].startswith("offscreen")
+    and "QT_QPA_FONTDIR" not in os.environ
+):
+    _fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    if _fonts.is_dir():
+        os.environ["QT_QPA_FONTDIR"] = str(_fonts)
 
 import braid  # noqa: E402
 

@@ -22,6 +22,7 @@ from PySide6.QtGui import (
     QPaintEvent,
     QPen,
     QResizeEvent,
+    QTextLayout,
 )
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -73,23 +74,75 @@ def _style_weight(style: str) -> int | None:
     return None
 
 
-def title_weight(font: QFont) -> QFont.Weight:
-    """标题请求的字重，必须对应中文字体真实存在的字面，禁止合成粗体。
+_TITLE_ORDER = (600, 500, 700)
+_WEIGHT_ENUM = {
+    400: QFont.Weight.Normal,
+    500: QFont.Weight.Medium,
+    600: QFont.Weight.DemiBold,
+    700: QFont.Weight.Bold,
+}
+TITLE_SAMPLE = "模型与服务"
 
-    顺序：SemiBold(600) > Medium(500) > 仅有 Bold 时 700 > 都没有用 Normal(400)。
+
+def title_faces(font: QFont) -> list[tuple[str, str, int]]:
+    """中文字体里可用作标题的真实字面 [(族, 实际样式名, 字重)]，按 600 > 500 > 700 排序。
+
+    样式名取自 QFontDatabase.styles()，不写死（Inter 叫 SemiBold，PingFang 叫 Semibold）。
     """
     fam = resolved_cjk_family(font)
     if fam is None:
-        return QFont.Weight.Normal
-    have = {_style_weight(s) for s in QFontDatabase.styles(fam)}
-    for w, enum in (
-        (600, QFont.Weight.DemiBold),
-        (500, QFont.Weight.Medium),
-        (700, QFont.Weight.Bold),
-    ):
-        if w in have:
-            return enum
-    return QFont.Weight.Normal
+        return []
+    found: dict[int, str] = {}
+    for st in QFontDatabase.styles(fam):
+        w = _style_weight(st)
+        if w is not None and w not in found:
+            found[w] = st
+    return [(fam, found[w], w) for w in _TITLE_ORDER if w in found]
+
+
+def title_weight(font: QFont) -> QFont.Weight:
+    """标题计划用的字重：SemiBold(600) > Medium(500) > 仅有 Bold 时 700 > Normal(400)。
+
+    只看字体库里存在的真实字面，禁止合成粗体；实际字体用 title_font() 构造。
+    """
+    faces = title_faces(font)
+    return _WEIGHT_ENUM[faces[0][2]] if faces else QFont.Weight.Normal
+
+
+def cjk_faces(font: QFont, text: str = TITLE_SAMPLE) -> list[tuple[str, str]]:
+    """用 glyphRuns 查 text 实际落到的 [(族, 字面样式名)]。"""
+    lay = QTextLayout(text, font)
+    lay.beginLayout()
+    lay.createLine().setLineWidth(100000)
+    lay.endLayout()
+    return [(r.rawFont().familyName(), r.rawFont().styleName()) for r in lay.glyphRuns()]
+
+
+def title_font(base: QFont, px: int) -> QFont:
+    """构造标题字体：拉丁字母走 base 的首选族（Inter），中文显式用 title_faces() 选中的真实字面。
+
+    依次尝试：只设字重 → 再加该族的实际样式名；用 glyphRuns 验证中文确实落到那个字面
+    （不是系统别名、不是 Regular 加合成粗体）。都不行就降到下一档，最后用常规字重。
+    """
+    latin = [f for f in base.families() if f not in CJK_FALLBACK][:1] or ["Inter"]
+    faces = title_faces(base)
+    for fam, style, w in faces:
+        for use_style in (False, True):
+            f = QFont(base)
+            f.setFamilies([*latin, fam])
+            f.setPixelSize(px)
+            f.setWeight(_WEIGHT_ENUM[w])
+            if use_style:
+                f.setStyleName(style)
+            got = cjk_faces(f)
+            if got and all(gf == fam and _style_weight(gs) == w for gf, gs in got):
+                return f
+    f = QFont(base)
+    if faces:
+        f.setFamilies([*latin, faces[0][0]])
+    f.setPixelSize(px)
+    f.setWeight(QFont.Weight.Normal)
+    return f
 
 
 def _over(base: QColor, top: QColor, alpha: float) -> QColor:
@@ -280,10 +333,7 @@ class PageHeader(QWidget):
         super().__init__(parent)
         self.title = QLabel(title, self)
         self.title.setObjectName("settingsTitle")
-        tf = QFont(self.title.font())
-        tf.setPixelSize(18)
-        tf.setWeight(title_weight(tf))
-        self.title.setFont(tf)
+        self.title.setFont(title_font(self.title.font(), 18))
         self.subtitle = QLabel(subtitle, self)
         self.subtitle.setObjectName("settingsSubtitle")
         self.subtitle.setWordWrap(True)

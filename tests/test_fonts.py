@@ -69,17 +69,25 @@ def test_title_weight_no_cjk(monkeypatch):
     assert spw.title_weight(QFont()) == QFont.Weight.Normal
 
 
-def test_title_600_never_synthesized(qapp):
-    """真实字体库下：中文字形必须落到 title_weight 选中的那个真实字面。"""
+def test_title_font_uses_real_face(qapp):
+    """真实字体库下：中文落到 title_font 请求字重对应的真实字面，拉丁字母仍是 Inter。"""
     register_bundled_fonts()
-    f = QFont(qapp.font())
-    f.setFamilies(["Inter", *spw.CJK_FALLBACK])
-    f.setPixelSize(18)
-    w = spw.title_weight(f)
-    f.setWeight(w)
-    for _fam, style in _faces(f, "模型与服务"):
-        got = spw._style_weight(style)
-        if w == QFont.Weight.Normal:
-            assert got is None, style
-        else:
-            assert got == int(w.value), (style, w)
+    base = QFont(qapp.font())
+    base.setFamilies(["Inter", *spw.CJK_FALLBACK])
+    f = spw.title_font(base, 18)
+    w = int(f.weight())
+    assert w <= int(spw.title_weight(base))
+    if spw.resolved_cjk_family(base) is not None:
+        for _fam, style in _faces(f, "模型与服务"):
+            got = spw._style_weight(style)
+            assert (got is None) if w == 400 else (got == w), (style, w)
+    assert {fam for fam, _ in _faces(f, "Models")} == {"Inter"}
+
+
+def test_title_font_style_name_from_db(monkeypatch, qapp):
+    """样式名从字体库取，不写死；字体库只有 Regular 时用常规字重。"""
+    monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: "X")
+    monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular", "Semibold"]))
+    assert spw.title_faces(QFont()) == [("X", "Semibold", 600)]
+    monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular"]))
+    assert spw.title_font(QFont(), 18).weight() == QFont.Weight.Normal

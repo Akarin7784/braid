@@ -22,11 +22,17 @@ from braid.backends.mock import MockBackend
 from braid.theme import load_qss
 from braid.theme.fonts import apply_app_font, register_bundled_fonts
 from braid.ui.main_window import MainWindow
-from braid.ui.settings.widgets import _style_weight, resolved_cjk_family, title_weight
+from braid.ui.settings.widgets import (
+    _style_weight,
+    resolved_cjk_family,
+    title_faces,
+    title_weight,
+)
 
 LATIN = "Braid settings: Model & Services 0123"
 CJK_BODY = "模型与服务的接口地址和密钥"
 TITLE = "模型与服务"
+TITLE_LATIN = "Models & Services"
 EXPECTED_CJK = {
     "darwin": ("PingFang SC",),
     "win32": ("Microsoft YaHei UI", "Microsoft YaHei"),
@@ -59,6 +65,10 @@ def runs(font: QFont, text: str) -> list[tuple[str, int, str, int]]:
 
 def main() -> int:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "fonts.txt")
+    # Windows 控制台默认 GBK/cp1252，打印中文会 UnicodeEncodeError
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     app = QApplication(sys.argv[:1])
     apply_app_font(app)
     app.setStyleSheet(load_qss("light"))
@@ -103,8 +113,18 @@ def main() -> int:
     lines.append(
         f"title_weight(): {int(want)}  resolved_cjk_family: {resolved_cjk_family(title_font)}"
     )
+    plan = ", ".join(f"{f} {st!r}({w})" for f, st, w in title_faces(title_font)) or "(none)"
+    lines.append(f"title candidates: {plan}")
+    lines.append(
+        f"title font: families={title_font.families()} weight={int(title_font.weight())}"
+        f" styleName={title_font.styleName()!r}"
+    )
     if int(title_font.weight()) != int(want):
-        errors.append(f"标题字重 {int(title_font.weight())} 与 title_weight() {int(want)} 不一致")
+        # title_font() 验证首选字面不能真正用上时会降档；降档不是错误，合成粗体才是
+        lines.append(f"  note: 首选 {int(want)} 用不上，降到 {int(title_font.weight())}")
+    tl = report("title-latin", title_font, TITLE_LATIN)
+    if not tl or any(fam != "Inter" for fam, *_ in tl):
+        errors.append(f"标题拉丁文没有落到 Inter：{[r[0] for r in tl]}")
     tit = report("title", title_font, TITLE)
     for fam, _wt, style, _n in tit:
         lines.append(f"    styles({fam}): {QFontDatabase.styles(fam)}")

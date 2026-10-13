@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QMargins, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPainter, QPainterPath, QPaintEvent, QPen, QShowEvent
+from PySide6.QtGui import QPainter, QPainterPath, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -41,7 +41,7 @@ from braid.ui.settings.widgets import (
     ToggleSwitch,
     mono_font,
     number_with_unit,
-    title_weight,
+    title_font,
 )
 
 SECTION = "advanced"
@@ -104,10 +104,7 @@ class ResetDialog(QDialog):
         lay.setSpacing(8)
         self.title = QLabel("重置全部设置？", self)
         self.title.setObjectName("dialogTitle")
-        tf = QFont(self.title.font())
-        tf.setPixelSize(15)
-        tf.setWeight(title_weight(tf))
-        self.title.setFont(tf)
+        self.title.setFont(title_font(self.title.font(), 15))
         lay.addWidget(self.title)
         self.desc = QLabel("所有设置项恢复为默认值，服务商列表保留。", self)
         self.desc.setObjectName("dialogDesc")

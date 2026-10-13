@@ -203,7 +203,7 @@ def test_title_weight_needs_real_cjk_face(qtbot, tmp_path, monkeypatch):
     page, _ = _page(qtbot, tmp_path)
     f = page.models.title.font()
     assert f.pixelSize() == 18
-    assert f.weight() == sp.title_weight(f)
+    assert f.weight() <= sp.title_weight(f)
     monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: "X")
     monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular"]))
     assert sp.title_weight(f) == QFont.Weight.Normal

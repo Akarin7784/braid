@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QPainter, QPaintEvent, QPen
+from importlib.resources import files
+
+from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QGraphicsOpacityEffect,
@@ -54,7 +56,7 @@ class KeyField(QWidget):
         self.edit.setPlaceholderText("API Key")
         self.eye = QToolButton(self)
         self.eye.setObjectName("keyEye")
-        self.eye.setText("👁")
+        self.eye.setIconSize(QSize(16, 16))
         self.eye.setCursor(Qt.CursorShape.PointingHandCursor)
         self.eye.clicked.connect(self.toggle_reveal)
         self.hint = QLabel("", self)
@@ -78,7 +80,16 @@ class KeyField(QWidget):
         self.edit.editingFinished.connect(self._commit)
         self._show_stored()
 
+    def _update_eye(self) -> None:
+        state = "open" if self._revealed else "closed"
+        theme = "dark" if is_dark() else "light"
+        res = files("braid.assets") / "icons" / f"eye_{state}_{theme}.png"
+        self.eye.setIcon(QIcon(str(res)))
+        self.eye.setProperty("eyeState", state)
+        self.eye.setToolTip("隐藏 Key" if self._revealed else "显示 Key")
+
     def _show_stored(self) -> None:
+        self._update_eye()
         key = secrets.get_key(self._pid)
         self.edit.setText(key if self._revealed else mask_key(key))
 

@@ -125,3 +125,13 @@ def test_slash_menu(qtbot):
     with qtbot.waitSignal(c.commandTriggered) as sig:
         qtbot.keyClick(c.input, Qt.Key.Key_Return)
     assert sig.args == ["clear"] and not c.cmd_menu.isVisible()
+
+
+def test_chip_text_does_not_overlap_arrow(qtbot):
+    from braid.theme.menu import ChipButton
+
+    b = ChipButton()
+    qtbot.addWidget(b)
+    b.setText("Mock Large · 最高")
+    text_w = b.fontMetrics().horizontalAdvance(b.text())
+    assert b.sizeHint().width() >= b.PAD_LEFT + text_w + b.GAP + b.ARROW + b.ARROW_RIGHT

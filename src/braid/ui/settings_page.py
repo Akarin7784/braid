@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QScrollArea,
-    QSizePolicy,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -271,7 +270,9 @@ class SettingsPage(QWidget):
         scroll.setWidgetResizable(True)
         # 内容宽度随视口收缩，窄窗口下不再露出横向滚动条（只保留纵向滚动）
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.models.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        # 视口至少容得下卡片的最小宽度：分割器据此给中栏留位（窗口最小宽度随之计算），
+        # 输入框只在这个下限以上伸缩，不会被压成 0 宽而裁掉眼睛按钮。
+        scroll.setMinimumWidth(self.models.minimumSizeHint().width())
         self.scroll_area = scroll
         scroll.setWidget(self.models)
         self.stack.addWidget(scroll)

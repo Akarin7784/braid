@@ -14,6 +14,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QScrollArea,
     QSizePolicy,
@@ -42,6 +43,9 @@ AGENT_ROW_H = 52
 PROMPT_MIN_H = 120
 EXPAND_MS = 150
 SAVE_DELAY_MS = 400
+EDITOR_BOTTOM_PAD = 16
+EDITOR_ROW_H = 36
+FIELD_W = 240
 LIST_MIN_H = 2 * AGENT_ROW_H
 TOOLS = (("read", "读取"), ("edit", "编辑"), ("bash", "命令"), ("webfetch", "网页"), ("mcp", "MCP"))
 INHERIT = ""  # model 为空 = 跟随默认模型
@@ -56,8 +60,28 @@ class AgentEditor(QWidget):
         super().__init__(parent)
         self.setObjectName("agentEditor")
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 12)
-        lay.setSpacing(4)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        # 名称 / 描述：自定义为单行输入（预填），内置为只读文字
+        self.name_edit: QLineEdit | None = None
+        self.desc_edit: QLineEdit | None = None
+        for key, label in (("name", "名称"), ("description", "描述")):
+            value = str(agent.get(key, ""))
+            w: QWidget
+            if agent.get("builtin"):
+                w = QLabel(value, self)
+                w.setObjectName("agentFieldValue")
+            else:
+                edit = QLineEdit(value, self)
+                edit.setObjectName("settingsInput")
+                edit.setFixedWidth(FIELD_W)
+                edit.editingFinished.connect(lambda k=key, e=edit: self._field_done(k, e))
+                w = edit
+                if key == "name":
+                    self.name_edit = edit
+                else:
+                    self.desc_edit = edit
+            lay.addWidget(self._row(label, w))
         self.model = SettingsCombo(self)
         self.model.addItem("跟随默认模型", INHERIT)
         for m in backend.list_models():
@@ -66,10 +90,10 @@ class AgentEditor(QWidget):
         self.model.currentIndexChanged.connect(
             lambda _i: self.changed.emit({"model": self.model.currentData()})
         )
-        lay.addWidget(SettingRow("模型", self.model, self))
+        lay.addWidget(self._row("模型", self.model))
         self.tools = ChipMultiSelect(TOOLS, agent.get("tools", []), self)
         self.tools.changed.connect(lambda keys: self.changed.emit({"tools": keys}))
-        lay.addWidget(SettingRow("允许的工具", self.tools, self))
+        lay.addWidget(self._row("允许的工具", self.tools))
         cap = QLabel("提示词", self)
         cap.setObjectName("settingLabel")
         lay.addWidget(cap)
@@ -79,13 +103,35 @@ class AgentEditor(QWidget):
         self.prompt.setPlaceholderText("留空则使用内置提示词")
         self.prompt.setFixedHeight(PROMPT_MIN_H)
         lay.addWidget(self.prompt)
+        # 底部 16px 留白；拖动把手（10px）放在这 16px 内部
         self.grow = GrowHandle(self.prompt, PROMPT_MIN_H, self)
-        lay.addWidget(self.grow)
+        self.bottom = QWidget(self)
+        self.bottom.setFixedHeight(EDITOR_BOTTOM_PAD)
+        bl = QVBoxLayout(self.bottom)
+        bl.setContentsMargins(0, 0, 0, EDITOR_BOTTOM_PAD - self.grow.height())
+        bl.addWidget(self.grow)
+        lay.addWidget(self.bottom)
         self._save = QTimer(self)
         self._save.setSingleShot(True)
         self._save.setInterval(SAVE_DELAY_MS)
         self._save.timeout.connect(lambda: self.changed.emit({"prompt": self.prompt.toPlainText()}))
         self.prompt.textChanged.connect(self._save.start)
+        self._last = {k: str(agent.get(k, "")) for k in ("name", "description")}
+
+    def _row(self, label: str, w: QWidget) -> SettingRow:
+        """编辑器内的紧凑行：只从外部设定行高，不改 SettingRow 内部布局。"""
+        row = SettingRow(label, w, self)
+        row.setFixedHeight(EDITOR_ROW_H)
+        return row
+
+    def _field_done(self, key: str, edit: QLineEdit) -> None:
+        text = edit.text().strip()
+        if key == "name" and not text:  # 名称不能为空：还原
+            edit.setText(self._last.get(key, ""))
+            return
+        if text != self._last.get(key):
+            self._last[key] = text
+            self.changed.emit({key: text})
 
 
 class AgentRow(QWidget):
@@ -166,6 +212,8 @@ class AgentRow(QWidget):
     def _on_edit(self, change: dict[str, Any]) -> None:
         self.agent.update(change)
         self.model_label.setText(self._model_text())
+        self.name.setText(str(self.agent["name"]))
+        self.desc.setText(str(self.agent.get("description", "")))
         self.edited.emit(self.agent_id, change)
 
     def build_menu(self) -> RoundedMenu:

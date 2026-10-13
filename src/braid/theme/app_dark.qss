@@ -135,10 +135,12 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #agentName { color: #ECECEA; font-weight: normal; }
 #agentDesc { color: #A3A3A0; font-size: 12px; }
 #agentModel { color: #73736F; font-size: 12px; }
-#agentTag { background: #30302F; color: #A3A3A0; font-size: 11px; border-radius: 6px; padding: 0 6px; }
+#agentTag { background: #3A3A39; color: #A3A3A0; font-size: 11px; border-radius: 6px; padding: 0 6px; }
 QToolButton#toolChip { background: #30302F; color: #A3A3A0; border: none; border-radius: 12px; padding: 3px 10px; font-size: 12px; }
 QToolButton#toolChip:checked { background: #3A3A39; color: #ECECEA; }
 QToolButton#toolChip:hover { color: #ECECEA; }
+QToolButton#toolChip:checked:hover { background: #3A3A39; }
+#agentFieldValue { color: #ECECEA; }
 QPlainTextEdit#promptEdit { background: #30302F; border: 1.5px solid transparent; border-radius: 8px; padding: 6px 8px; }
 QPlainTextEdit#promptEdit:focus { border-color: #D97757; }
 #instructionPath { color: #ECECEA; }
@@ -154,8 +156,8 @@ QToolButton#textButton { background: transparent; color: #A3A3A0; border: none; 
 QToolButton#textButton:hover { background: #343433; color: #ECECEA; }
 QToolButton#textButton:disabled { color: #73736F; }
 #testResult { font-size: 12px; }
-QLineEdit#settingsNumber, QComboBox#settingsCombo { background: #30302F; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
-QLineEdit#settingsNumber:focus, QComboBox#settingsCombo:focus { border-color: #D97757; }
+QLineEdit#settingsNumber, QLineEdit#settingsInput, QComboBox#settingsCombo { background: #30302F; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
+QLineEdit#settingsNumber:focus, QLineEdit#settingsInput:focus, QComboBox#settingsCombo:focus { border-color: #D97757; }
 QLineEdit#settingsField { background: #30302F; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
 QLineEdit#settingsField:focus { background: #2A2A29; border: 1px solid rgba(217, 119, 87, 68); }
 #keyringWarning { background: rgba(224, 165, 74, 38); color: #E0A54A; border-radius: 8px; padding: 8px 12px; }

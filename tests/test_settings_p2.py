@@ -106,7 +106,7 @@ def test_agent_row_colors_qss(theme):
     assert t["text2"] in desc and "12px" in desc
     assert t["text3"] in _line(theme, "#agentModel")
     tag = _line(theme, "#agentTag")
-    assert t["control"] in tag and "11px" in tag and "border-radius: 6px" in tag
+    assert t["active"] in tag and "11px" in tag and "border-radius: 6px" in tag
     assert t["active"] in _line(theme, "QToolButton#toolChip:checked")
 
 
@@ -160,6 +160,63 @@ def test_editor_fields_save(qtbot, tmp_path):
     assert ed.prompt.height() == 200
     ed.grow.grow_to(50)
     assert ed.prompt.height() == PROMPT_MIN_H
+
+
+def test_editor_name_desc(qtbot, tmp_path):
+    from PySide6.QtWidgets import QLabel, QLineEdit
+
+    page, b = _settings(qtbot, tmp_path)
+    ap: AgentsPage = page.pages["agents"]
+    builtin, custom = ap.list.agent_rows()[0], ap.list.agent_rows()[2]
+    # 内置：只读文字，没有输入框
+    assert builtin.editor.name_edit is None and builtin.editor.desc_edit is None
+    texts = [w.text() for w in builtin.editor.findChildren(QLabel, "agentFieldValue")]
+    assert texts == ["构建", "默认智能体，可读写文件、执行命令"]
+    assert not builtin.editor.findChildren(QLineEdit)
+    # 自定义：预填单行输入，改动写配置并更新行
+    ed = custom.editor
+    assert ed.name_edit is not None and ed.desc_edit is not None
+    assert ed.name_edit.text() == "代码审查" and ed.desc_edit.text() == "审查改动并给出修改建议"
+    ed.name_edit.setText("  安全审查 ")
+    ed.name_edit.editingFinished.emit()
+    ed.desc_edit.setText("找出安全问题")
+    ed.desc_edit.editingFinished.emit()
+    a = b.get_config("agents")["agents"][2]
+    assert a["name"] == "安全审查" and a["description"] == "找出安全问题"
+    assert custom.name.text() == "安全审查" and custom.desc.text() == "找出安全问题"
+    ed.name_edit.setText("")  # 空名称还原
+    ed.name_edit.editingFinished.emit()
+    assert ed.name_edit.text() == "安全审查"
+    assert b.get_config("agents")["agents"][2]["name"] == "安全审查"
+    # ⋯ 菜单不含重命名
+    acts = [x.text() for x in custom.build_menu().actions()]
+    assert "重命名" not in acts and acts == ["编辑", "删除智能体"]
+
+
+def test_editor_bottom_pad(qtbot, tmp_path):
+    page, _b = _settings(qtbot, tmp_path)
+    ap: AgentsPage = page.pages["agents"]
+    page.show()
+    page.show_section("agents")
+    row = ap.list.agent_rows()[2]
+    ap.toggle(row, animate=False)
+    qtbot.wait(20)
+    ed = row.editor
+    assert ed.bottom.height() == 16
+    assert ed.grow.parent() is ed.bottom
+    g = ed.grow.geometry()
+    assert g.top() >= 0 and g.bottom() < 16
+    assert ed.bottom.geometry().bottom() == ed.height() - 1
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_tool_chips_qss(theme):
+    t = tokens(theme == "dark")
+    off = _line(theme, "QToolButton#toolChip {")
+    on = _line(theme, "QToolButton#toolChip:checked {")
+    assert t["control"] in off and t["text2"] in off
+    assert t["active"] in on and t["text"] in on
+    assert t["control"] != t["surface"]  # 卡片上可见
 
 
 def test_menu_and_delete(qtbot, tmp_path):
@@ -232,11 +289,11 @@ def test_rules_add_remove_empty(qtbot, tmp_path):
     page.show_section("rules")
     assert rp.add_row.isHidden()
     rp.add_btn.click()
-    assert rp.add_row.isVisible() and rp.add_btn.isHidden()
+    assert rp.add_row.isVisible() and rp.add_btn.isVisible() and rp.pick_btn.isVisible()
     qtbot.keyClicks(rp.input, "docs/*.md")
     qtbot.keyClick(rp.input, Qt.Key.Key_Return)
     assert "docs/*.md" in b.get_config("rules")["instructions"]
-    assert rp.add_row.isHidden() and rp.add_btn.isVisible()
+    assert rp.add_row.isHidden() and rp.add_btn.isVisible() and rp.pick_btn.isVisible()
     assert not rp.add_path("docs/*.md")  # 去重
     for p in list(rp.paths()):
         next(r for r in rp.rows() if r.path == p).remove.click()
@@ -285,7 +342,7 @@ def test_p2_pages_fit_800(qtbot, tmp_path, monkeypatch, theme):
             if panel_open:
                 w.set_panel_open(True, animate=False)
             assert w.panel_open() == panel_open
-            for key in ("agents", "rules"):
+            for key in ("agents", "rules", "mcp"):
                 sp.show_section(key)
                 qtbot.wait(30)
                 assert sp.scrolls[key].verticalScrollBar().maximum() == 0, (key, panel_open)

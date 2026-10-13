@@ -135,10 +135,12 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #agentName { color: ${text}; font-weight: normal; }
 #agentDesc { color: ${text2}; font-size: 12px; }
 #agentModel { color: ${text3}; font-size: 12px; }
-#agentTag { background: ${control}; color: ${text2}; font-size: 11px; border-radius: 6px; padding: 0 6px; }
+#agentTag { background: ${active}; color: ${text2}; font-size: 11px; border-radius: 6px; padding: 0 6px; }
 QToolButton#toolChip { background: ${control}; color: ${text2}; border: none; border-radius: 12px; padding: 3px 10px; font-size: 12px; }
 QToolButton#toolChip:checked { background: ${active}; color: ${text}; }
 QToolButton#toolChip:hover { color: ${text}; }
+QToolButton#toolChip:checked:hover { background: ${active}; }
+#agentFieldValue { color: ${text}; }
 QPlainTextEdit#promptEdit { background: ${control}; border: 1.5px solid transparent; border-radius: 8px; padding: 6px 8px; }
 QPlainTextEdit#promptEdit:focus { border-color: ${brand}; }
 #instructionPath { color: ${text}; }
@@ -154,8 +156,8 @@ QToolButton#textButton { background: transparent; color: ${text2}; border: none;
 QToolButton#textButton:hover { background: ${hover}; color: ${text}; }
 QToolButton#textButton:disabled { color: ${text3}; }
 #testResult { font-size: 12px; }
-QLineEdit#settingsNumber, QComboBox#settingsCombo { background: ${control}; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
-QLineEdit#settingsNumber:focus, QComboBox#settingsCombo:focus { border-color: ${brand}; }
+QLineEdit#settingsNumber, QLineEdit#settingsInput, QComboBox#settingsCombo { background: ${control}; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
+QLineEdit#settingsNumber:focus, QLineEdit#settingsInput:focus, QComboBox#settingsCombo:focus { border-color: ${brand}; }
 QLineEdit#settingsField { background: ${control}; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
 QLineEdit#settingsField:focus { background: ${surface}; border: 1px solid ${sel}; }
 #keyringWarning { background: ${warning_bg}; color: ${warning}; border-radius: 8px; padding: 8px 12px; }

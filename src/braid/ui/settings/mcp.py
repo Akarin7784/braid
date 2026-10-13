@@ -12,18 +12,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from PySide6.QtCore import QRect, Qt, Signal
-from PySide6.QtGui import QPainter, QPaintEvent, QPen, QResizeEvent
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QToolButton, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPainter, QPaintEvent, QResizeEvent
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 from braid.core.backend import AgentBackend
 from braid.theme.menu import is_dark
 from braid.theme.palette import qcolor
 from braid.ui.settings.pages import SectionPage, register_page
-from braid.ui.settings.widgets import CARD_RADIUS, SettingCard, SettingRow, ToggleSwitch
+from braid.ui.settings.widgets import (
+    ADD_CARD_H,
+    AddCard,
+    SettingCard,
+    SettingRow,
+    ToggleSwitch,
+)
 
 SECTION = "mcp"
-ADD_H = 64
+ADD_H = ADD_CARD_H  # 兼容旧名
 ERROR_TEXT = "连接失败"
 NAME_W = 120  # 名称列定宽，命令/URL 列在所有行同一 x 起
 McpKind = Literal["local", "remote"]
@@ -147,27 +153,6 @@ class McpRow(SettingRow):
         self.switch.toggled.connect(lambda on: self.toggled.emit(cfg.name, on))
 
 
-class AddMcpCard(QToolButton):
-    """虚线占位卡：和卡片同宽，64px 高。"""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setText("+ 添加 MCP 服务")
-        self.setObjectName("addMcpCard")
-        self.setFixedHeight(ADD_H)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
-        dark = is_dark()
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(qcolor("text3", dark), 1, Qt.PenStyle.DashLine))
-        p.drawRoundedRect(QRect(self.rect()).adjusted(1, 1, -1, -1), CARD_RADIUS, CARD_RADIUS)
-        p.setPen(qcolor("text2", dark))
-        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
-
-
 class McpPage(SectionPage):
     GROUPS = (("local", "本地"), ("remote", "远程"))
 
@@ -179,7 +164,7 @@ class McpPage(SectionPage):
             card = SettingCard(label, self)
             self.cards[kind] = card
             self.lay.addWidget(card)
-        self.add_card = AddMcpCard(self)
+        self.add_card = AddCard("+ 添加 MCP 服务", self)
         self.lay.addWidget(self.add_card)
         self.finish()
         backend.config_changed.connect(self._on_config_changed)

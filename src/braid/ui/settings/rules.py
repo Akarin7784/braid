@@ -65,7 +65,7 @@ class RulesPage(SectionPage):
     SECTION = SECTION
 
     def __init__(self, backend: AgentBackend, parent: QWidget | None = None) -> None:
-        super().__init__("规则与指令", "智能体每次对话前读取的指令文件，可用 glob", parent)
+        super().__init__("规则与指令", "智能体每次对话前读取的指令文件，支持通配符", parent)
         self.backend = backend
         self.card = SettingCard("指令文件", self)
         self.rows_box = QVBoxLayout()
@@ -75,14 +75,21 @@ class RulesPage(SectionPage):
         self.empty.setObjectName("settingsEmpty")
         self.empty.setWordWrap(True)
         self.card.add_widget(self.empty)
-        # 行内添加：输入框 + “选择文件”，默认收起，只露出“+ 添加指令文件”
+        # 行内添加：点“+ 添加指令文件”在卡末展开输入框（位于按钮行之上）
         self.add_btn = QToolButton(self.card)
         self.add_btn.setObjectName("textButton")
         self.add_btn.setText("+ 添加指令文件")
         self.add_btn.setFixedHeight(36)
         self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_btn.clicked.connect(self.start_add)
-        self.card.add_widget(self.add_btn)
+        # “+ 添加指令文件”与右侧“选择文件”同一行，始终可见
+        self.action_bar = QWidget(self.card)
+        self.action_bar.setFixedHeight(36)
+        al = QHBoxLayout(self.action_bar)
+        al.setContentsMargins(0, 0, 0, 0)
+        al.setSpacing(8)
+        al.addWidget(self.add_btn)
+        al.addStretch(1)
         self.add_row = QWidget(self.card)
         self.add_row.setFixedHeight(ROW_H)
         ar = QHBoxLayout(self.add_row)
@@ -92,17 +99,18 @@ class RulesPage(SectionPage):
         self.input.setObjectName("settingsField")
         self.input.setFont(mono_font(px=12))
         self.input.setFixedHeight(30)
-        self.input.setPlaceholderText("路径或 glob，如 docs/*.md，回车确认")
+        self.input.setPlaceholderText("路径或通配符，如 docs/*.md，回车确认")
         self.input.returnPressed.connect(self._confirm_input)
-        self.pick_btn = QToolButton(self.add_row)
+        self.pick_btn = QToolButton(self.action_bar)
         self.pick_btn.setObjectName("textButton")
         self.pick_btn.setText("选择文件")
         self.pick_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pick_btn.clicked.connect(self.pick_file)
         ar.addWidget(self.input, 1)
-        ar.addWidget(self.pick_btn)
+        al.addWidget(self.pick_btn)
         self.add_row.hide()
         self.card.add_widget(self.add_row)
+        self.card.add_widget(self.action_bar)
         self.lay.addWidget(self.card)
         self.finish()
         self.rebuild()
@@ -147,14 +155,12 @@ class RulesPage(SectionPage):
         self._save([p for p in self.paths() if p != path])
 
     def start_add(self) -> None:
-        self.add_btn.hide()
         self.add_row.show()
         self.input.setFocus()
 
     def _finish_add(self) -> None:
         self.input.clear()
         self.add_row.hide()
-        self.add_btn.show()
 
     def _confirm_input(self) -> None:
         self.add_path(self.input.text())

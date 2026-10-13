@@ -186,3 +186,4 @@ QDialog#resetDialog { background: transparent; }
 QToolButton#dialogCancel { background: #30302F; color: #ECECEA; border: none; border-radius: 8px; padding: 0 14px; }
 QToolButton#dialogCancel:hover { background: #343433; }
 QToolButton#dangerButton { background: #E2685B; color: #FFFFFF; border: none; border-radius: 8px; padding: 0 14px; }
+QDialog#resetDialog QCheckBox::indicator:checked { background: #E2685B; }

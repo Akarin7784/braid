@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontInfo
+from PySide6.QtGui import QColor, QFontInfo
 from PySide6.QtWidgets import QApplication
 
 from braid.backends.mock import MockBackend
@@ -101,7 +101,9 @@ def test_split_and_mac_symbols():
     assert display_parts("Ctrl+Alt+Shift+Meta+K", mac=True) == ["⌃", "⌥", "⇧", "⌘", "K"]
     assert display_parts("Shift+Return", mac=True) == ["⇧", "↩"]
     assert display_parts("Ctrl+Shift+B", mac=False) == ["Ctrl", "Shift", "B"]
-    assert display_parts("Alt+Meta+X", mac=False) == ["Alt", "Win", "X"]
+    assert display_parts("Alt+Meta+X", mac=False, win=True) == ["Alt", "Win", "X"]
+    assert display_parts("Alt+Meta+X", mac=False, win=False) == ["Alt", "Super", "X"]
+    assert display_parts("Meta+K", mac=True) == ["⌃", "K"]
     assert display_parts("Return", mac=False) == ["Enter"]
     assert "+" not in display_parts("Ctrl+Shift+B", mac=False)
 
@@ -363,7 +365,8 @@ def test_reset_dialog_ui(qtbot):
     for theme in ("light", "dark"):
         t = tokens(theme == "dark")
         ok = _line(theme, "QToolButton#dangerButton")
-        assert t["danger"] in ok and "#FFFFFF" in ok.upper()
+        assert t["danger"] in ok and f"color: {t['on_danger']}" in ok
+        assert "wc_close_fg" not in ok and t["on_danger"].upper() == "#FFFFFF"
     dlg.cancel_btn.click()
     assert not dlg.isVisible()
 
@@ -472,3 +475,79 @@ def test_p3_pages_fit_800(qtbot, tmp_path, monkeypatch, theme):
             assert kp.search.mapTo(kp, kp.search.rect().topLeft()).y() >= 0
     finally:
         app.setProperty("braidDark", False)
+
+
+def test_linux_meta_super(monkeypatch):
+    import braid.ui.settings.keybinds as kb
+
+    monkeypatch.setattr(kb.sys, "platform", "linux")
+    assert kb.display_parts("Meta+Shift+P", mac=False) == ["Shift", "Super", "P"]
+    monkeypatch.setattr(kb.sys, "platform", "win32")
+    assert kb.display_parts("Meta+Shift+P", mac=False) == ["Shift", "Win", "P"]
+
+
+def test_on_danger_token_both_themes():
+    for dark in (False, True):
+        assert tokens(dark)["on_danger"] == "#FFFFFF"
+    for theme in ("light", "dark"):
+        ind = _line(theme, "QDialog#resetDialog QCheckBox::indicator:checked")
+        assert tokens(theme == "dark")["danger"] in ind
+
+
+def test_reset_dialog_centered_on_window(qtbot):
+    from PySide6.QtWidgets import QWidget
+
+    top = QWidget()
+    qtbot.addWidget(top)
+    top.resize(1280, 800)
+    top.move(40, 30)
+    page = AdvancedPage(MockBackend())
+    page.setParent(top)
+    page.setGeometry(300, 0, 760, 800)  # 页面偏右（导航在左），对话框仍按整窗居中
+    top.show()
+    qtbot.waitExposed(top)
+    dlg = page.open_reset_dialog()
+    qtbot.addWidget(dlg)
+    qtbot.waitExposed(dlg)
+    win_c = top.mapToGlobal(top.rect().center())
+    card = dlg.card_rect().toRect().translated(dlg.pos())
+    assert abs(card.center().x() - win_c.x()) <= 1
+    assert abs(card.center().y() - win_c.y()) <= 1
+    dlg.reject()
+
+
+def test_reset_dialog_checkmark_on_danger(qtbot):
+    from PySide6.QtWidgets import QStyle, QStyleOptionButton
+
+    from braid.ui.settings.advanced import CHECK_PX, DangerCheckBox
+
+    page, _b = _adv(qtbot)
+    dlg = page.open_reset_dialog()
+    qtbot.addWidget(dlg)
+    dlg.setStyleSheet(load_qss("light"))
+    cb = dlg.delete_keys
+    assert isinstance(cb, DangerCheckBox) and CHECK_PX == 12
+    opt = QStyleOptionButton()
+    cb.initStyleOption(opt)
+    box = cb.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, cb)
+    white = QColor(tokens(False)["on_danger"])
+
+    def white_px() -> int:
+        img = cb.grab().toImage()
+        dpr = img.devicePixelRatio()
+        n = 0
+        for x in range(int(box.left() * dpr), int((box.right() + 1) * dpr)):
+            for y in range(int(box.top() * dpr), int((box.bottom() + 1) * dpr)):
+                c = img.pixelColor(x, y)
+                # ✓ 有抗锯齿：取接近 on_danger 的像素（未勾选底色 check=#E3E3E2 不会命中）
+                if (
+                    min(abs(c.red() - white.red()), 255) <= 10
+                    and abs(c.green() - white.green()) <= 10
+                ):
+                    n += 1
+        return n
+
+    assert white_px() == 0
+    cb.setChecked(True)
+    assert white_px() > 0
+    dlg.reject()

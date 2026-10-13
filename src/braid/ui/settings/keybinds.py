@@ -47,7 +47,8 @@ CLEARED_TEXT = "未设置"
 
 MAC_MODS = {"Meta": "⌃", "Alt": "⌥", "Shift": "⇧", "Ctrl": "⌘"}
 MAC_ORDER = ("Meta", "Alt", "Shift", "Ctrl")  # ⌃⌥⇧⌘，macOS 习惯顺序
-PC_MODS = {"Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift", "Meta": "Win"}
+PC_MODS = {"Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift", "Meta": "Win"}  # Windows
+LINUX_MODS = {**PC_MODS, "Meta": "Super"}
 PC_ORDER = ("Ctrl", "Alt", "Shift", "Meta")
 MAC_KEYS = {
     "Return": "↩",
@@ -92,13 +93,20 @@ def split_portable(seq: str) -> tuple[list[str], str]:
     return [m for m in mods.split("+") if m], key
 
 
-def display_parts(seq: str, mac: bool | None = None) -> list[str]:
-    """PortableText → 每个键帽上的文字（不含 '+'）。"""
+def display_parts(seq: str, mac: bool | None = None, win: bool | None = None) -> list[str]:
+    """PortableText → 每个键帽上的文字（不含 '+'）。
+
+    Meta 键：macOS ⌃、Windows “Win”、Linux “Super”。``mac`` / ``win`` 为 None 时按当前平台。
+    """
     mac = is_mac() if mac is None else mac
+    win = sys.platform == "win32" if win is None else win
     mods, key = split_portable(seq)
     if not key:
         return []
-    names, order, keys = (MAC_MODS, MAC_ORDER, MAC_KEYS) if mac else (PC_MODS, PC_ORDER, PC_KEYS)
+    if mac:
+        names, order, keys = MAC_MODS, MAC_ORDER, MAC_KEYS
+    else:
+        names, order, keys = (PC_MODS if win else LINUX_MODS), PC_ORDER, PC_KEYS
     parts = [names[m] for m in order if m in mods]
     return [*parts, keys.get(key, key)]
 

@@ -14,13 +14,15 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QMargins, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPainter, QPaintEvent
+from PySide6.QtGui import QFont, QPainter, QPaintEvent, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QStyle,
+    QStyleOptionButton,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -48,6 +50,28 @@ RESET_GAP = 32
 IGNORE_HINT = "已自动忽略 node_modules、.git 等常见目录"
 SNAPSHOT_NOTE = "关闭后无法撤销智能体的改动"
 KEEP_MIN, KEEP_MAX = 1000, 200000
+
+
+CHECK_PX = 12
+
+
+class DangerCheckBox(QCheckBox):
+    """勾选时在指示框里画 12px ✓，颜色 on_danger（指示框底色由 QSS 设为 danger）。"""
+
+    def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(e)
+        if not self.isChecked():
+            return
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        box = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, self)
+        p = QPainter(self)
+        p.setPen(qcolor("on_danger", is_dark()))
+        f = QFont(self.font())
+        f.setPixelSize(CHECK_PX)
+        p.setFont(f)
+        p.drawText(box, Qt.AlignmentFlag.AlignCenter, "✓")
+        p.end()
 
 
 class ResetDialog(QDialog):
@@ -79,7 +103,7 @@ class ResetDialog(QDialog):
         self.desc.setObjectName("dialogDesc")
         lay.addWidget(self.desc)
         lay.addSpacing(4)
-        self.delete_keys = QCheckBox("同时删除钥匙串里的 API Key", self)
+        self.delete_keys = DangerCheckBox("同时删除钥匙串里的 API Key", self)
         self.delete_keys.setChecked(False)
         self.delete_keys.toggled.connect(self._sync)
         lay.addWidget(self.delete_keys)
@@ -101,6 +125,20 @@ class ResetDialog(QDialog):
         for b in (self.cancel_btn, self.ok_btn):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
+
+    def center_on_window(self) -> None:
+        """在整个顶层窗口上水平、垂直居中（阴影外扩四边相等，对话框中心即卡片中心）。"""
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        self.adjustSize()
+        top = parent.window()
+        center = top.mapToGlobal(top.rect().center())
+        self.move(center - self.rect().center())
+
+    def showEvent(self, e: QShowEvent) -> None:  # noqa: N802
+        self.center_on_window()
+        super().showEvent(e)
 
     def _sync(self, on: bool) -> None:
         self.ok_btn.setText("重置并删除 Key" if on else "重置")

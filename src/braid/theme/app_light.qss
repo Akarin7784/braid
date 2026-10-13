@@ -89,7 +89,6 @@ QTabWidget::tab-bar { border: none; }
 #EmptyHint, #PanelPlaceholder { color: #9E9E9B; font-size: 13px; }
 #Sidebar QPushButton[variant="secondary"] { padding: 8px 12px; }
 #SessionList::item { padding: 7px 10px; }
-#SessionList::item:selected { font-weight: 600; }
 QTabBar#PanelTabs::tab { padding: 4px 8px; font-size: 13px; }
 #ChatArea QPushButton[variant="ghost"] { color: #9E9E9B; border-radius: 8px; }
 #ChatArea QPushButton[variant="ghost"]:hover { color: #1F1F1E; }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import (
@@ -881,7 +881,46 @@ class ChatView(QListView):
         self.chat_model.rowsInserted.connect(lambda *_: self._stick_bottom())
         self.chat_model.dataChanged.connect(lambda *_: self._stick_bottom())
         self._at_bottom = True
+        self._stream_h: tuple[tuple[int, int, int], int] | None = None
         self.verticalScrollBar().valueChanged.connect(self._track_bottom)
+
+    def dataChanged(
+        self,
+        topLeft: QModelIndex | QPersistentModelIndex,
+        bottomRight: QModelIndex | QPersistentModelIndex,
+        roles: Sequence[int] = (),
+    ) -> None:
+        """流式行高度不变时只重画该行。
+
+        Qt6 的 QListView.dataChanged 在非统一行高时总会安排整表重排，重排后整个视口
+        update()，于是每帧都重画所有可见气泡。这里对“单行、正在流式、行高没变”的更新
+        跳过 QListView 的重排，只走 QAbstractItemView 的单行 update(visualRect)；
+        行高变了（换行/新段落）或其他任何改动仍走原路径整表重排。
+        """
+        if topLeft == bottomRight and topLeft.isValid() and not self._height_changed(topLeft):
+            QAbstractItemView.dataChanged(self, topLeft, bottomRight, list(roles))
+            return
+        super().dataChanged(topLeft, bottomRight, list(roles))
+
+    def _height_changed(self, idx: QModelIndex | QPersistentModelIndex) -> bool:
+        """与上次整表重排时记下的流式行高比较。
+
+        visualRect() 的高度是实时 sizeHint，不是布局里存的高度，不能拿来比；
+        所以自己记一份：每次走整表重排时记下该流式行的高度。
+        """
+        item = self.chat_model.items[idx.row()]
+        if not item.streaming:
+            self._stream_h = None
+            return True
+        opt = QStyleOptionViewItem()
+        self.initViewItemOption(opt)
+        opt.rect = QRect(0, 0, self.viewport().width(), 0)
+        key = (id(item), item.current, self.viewport().width())
+        h = self.delegate.sizeHint(opt, idx).height()
+        if self._stream_h == (key, h):
+            return False
+        self._stream_h = (key, h)
+        return True
 
     def _track_bottom(self, v: int) -> None:
         self._at_bottom = v >= self.verticalScrollBar().maximum() - 4

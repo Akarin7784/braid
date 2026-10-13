@@ -141,10 +141,14 @@ def test_selected_has_background(bar, qtbot):
 
 
 def test_center_fills_when_panel_collapsed(win, qtbot):
-    win.set_panel_open(False)
-    qtbot.waitUntil(lambda: not win.panel.isVisible(), timeout=2000)
+    win.set_panel_open(False, animate=False)
     chat = win.chat_view.parentWidget()
-    assert chat.mapTo(win, chat.rect().topRight()).x() >= win.width() - 1
+
+    def filled() -> bool:
+        return chat.mapTo(win, chat.rect().topRight()).x() >= win.width() - 1
+
+    # macOS 上分割器/布局可能晚一拍才调整完，等稳定后再断言
+    qtbot.waitUntil(lambda: not win.panel.isVisible() and filled(), timeout=3000)
     win.set_panel_open(True, animate=False)
     assert win.panel.width() >= 240
 
@@ -203,3 +207,22 @@ def test_panel_toggle_aligns_right(qtbot) -> None:
     QApplication.processEvents()
     right = t.mapTo(w, t.rect().topLeft()).x() + t.width()
     assert w.controls.x() - right == 8
+
+
+def test_title_bar_single_center_line(qtbot) -> None:
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(1200, 760)
+    w.show()
+    for open_ in (False, True):
+        w.set_panel_open(open_, animate=False)
+        QApplication.processEvents()
+        bar = w.title_bar
+        assert bar.height() == 44
+        for c in (w.sidebar_toggle, w.title, w.panel_toggle):
+            assert abs(c.geometry().center().y() + 0.5 - 22) <= 0.5, c.objectName()
+        if not open_:
+            top = w.controls.y() - bar.mapTo(w, bar.rect().topLeft()).y()
+            assert abs(top + w.controls.height() / 2 - 22) <= 0.5
+    for b in (w.sidebar_toggle, w.panel_toggle):
+        assert (b.width(), b.height()) == (28, 28)

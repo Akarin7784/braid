@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, Qt, QVariantAnimation
 from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -22,6 +22,7 @@ from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
+from braid.ui.icon_button import IconButton
 from braid.ui.sidebar import Sidebar
 from braid.ui.window_controls import RIGHT_MARGIN, WindowControls
 
@@ -44,6 +45,9 @@ def _btn(text: str, variant: str) -> QPushButton:
     return b
 
 
+TITLE_H = 44
+
+
 class MainWindow(QMainWindow):
     def __init__(self, backend: AgentBackend) -> None:
         super().__init__()
@@ -60,28 +64,35 @@ class MainWindow(QMainWindow):
         chat = QFrame()
         chat.setObjectName("ChatArea")
         cl = QVBoxLayout(chat)
-        cl.setContentsMargins(24, 12, 16, 16)
-        top = QHBoxLayout()
-        self.sidebar_toggle = _btn("\u2630", "ghost")
+        cl.setContentsMargins(24, 0, 16, 16)
+        # 标题行：固定 44px，所有元素以 y=22 为中心线垂直居中
+        self.title_bar = bar = QWidget()
+        bar.setObjectName("TitleBar")
+        bar.setFixedHeight(TITLE_H)
+        top = QHBoxLayout(bar)
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(8)
+        center = Qt.AlignmentFlag.AlignVCenter
+        self.sidebar_toggle = IconButton("sidebar")
         self.sidebar_toggle.setObjectName("SidebarToggle")
-        self.sidebar_toggle.setFixedSize(32, 28)
         self.sidebar_toggle.clicked.connect(lambda: sidebar.setVisible(not sidebar.isVisible()))
-        top.addWidget(self.sidebar_toggle)
+        top.addWidget(self.sidebar_toggle, 0, center)
         self.title = QLabel("")
         self.title.setObjectName("SessionTitle")
-        top.addWidget(self.title)
+        # 按字形框居中：标签高度=字形高度，再整体垂直居中
+        self.title.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.title.setFixedHeight(28)
+        top.addWidget(self.title, 0, center)
         top.addWidget(DragArea(minimumHeight=24), 1)
-        self.panel_toggle = _btn("\u25e8", "ghost")
+        self.panel_toggle = IconButton("panel")
         self.panel_toggle.setObjectName("PanelToggle")
-        self.panel_toggle.setFixedSize(32, 28)
         self.panel_toggle.clicked.connect(lambda: self.set_panel_open(not self.panel_open()))
-        top.addWidget(self.panel_toggle)
-        # 给浮层窗口控制按钮留位置（收起侧面板时按钮在这里）
-        # 右栏收起时按钮浮在这里：开关距按钮 8px；右栏打开时开关贴中栏右缘 16px
+        top.addWidget(self.panel_toggle, 0, center)
+        # 右栏收起时窗口按钮浮在这里：开关距按钮 8px；右栏打开时开关贴中栏右缘 16px
         self._top_spacer = QSpacerItem(0, 0)
         top.addSpacerItem(self._top_spacer)
         self._top_bar = top
-        cl.addLayout(top)
+        cl.addWidget(bar)
         self.chat_view = ChatView()
         cl.addWidget(self.chat_view, 1)
         models = backend.list_models()
@@ -230,9 +241,9 @@ class MainWindow(QMainWindow):
             tb = self.panel_tabs
             cy = tb.mapTo(self, tb.rect().center()).y()
         else:
-            t = self.title
-            cy = t.mapTo(self, t.rect().center()).y()
-        c.move(x, int(cy - c.height() / 2 + 0.5))
+            b = self.title_bar
+            cy = b.mapTo(self, QPoint(0, 0)).y() + TITLE_H // 2
+        c.move(x, round(cy - c.height() / 2))
         c.raise_()
 
     def eventFilter(self, obj: QObject, e: QEvent) -> bool:

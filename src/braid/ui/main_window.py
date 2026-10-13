@@ -293,11 +293,22 @@ class MainWindow(QMainWindow):
         need = sum(splitter_min_width(w) for w in vis) + sp.handleWidth() * max(len(vis) - 1, 0)
         self.setMinimumWidth(max(need, 560))
 
+    def _controls_on_panel(self) -> bool:
+        """窗口按钮是否落在右栏标签行上；否则浮在中栏标题行右端，标题行要给它让位。
+
+        用 isHidden() 而不是 isVisible()：窗口还没 show（或截图时直接 grab）时
+        isVisible() 恒为 False，会让标题行误留出按钮的位置，收起按钮被挤到中栏中间。
+        """
+        p = self.panel
+        return not p.isHidden() and p.width() > WindowControls.total_width() + RIGHT_MARGIN
+
     def _sync_top_spacer(self) -> None:
         sp = getattr(self, "_top_spacer", None)
         if sp is None:
             return
-        w = 0 if self.panel.isVisible() else WindowControls.reserved_width() + 8 - 16
+        w = 0 if self._controls_on_panel() else WindowControls.reserved_width() + 8 - 16
+        if sp.sizeHint().width() == w:
+            return
         sp.changeSize(w, 0)
         self._top_bar.invalidate()
 
@@ -307,7 +318,7 @@ class MainWindow(QMainWindow):
         if c is None:
             return
         x = self.width() - RIGHT_MARGIN - c.width()
-        if self.panel.isVisible() and self.panel.width() > c.width() + RIGHT_MARGIN:
+        if self._controls_on_panel():
             tb = self.panel_tabs
             cy = tb.mapTo(self, QRectF(tb.rect()).center()).y()  # QRect.center() 偶数高度偏上 1px
         else:

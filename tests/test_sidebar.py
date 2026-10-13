@@ -426,3 +426,26 @@ def test_selected_title_regular_weight(qtbot):
         assert fonts and all(f.weight() == QFont.Weight.Normal and not f.bold() for f in fonts)
     finally:
         app.setProperty("braidDark", False)
+
+
+@pytest.mark.parametrize("settings", [False, True])
+@pytest.mark.parametrize("shown", [False, True])
+def test_panel_toggle_hugs_center_right(qtbot, settings, shown):
+    """右栏展开时，收起按钮贴中栏右缘 16px；对话页和设置页一致，未 show 直接 grab 也一样。"""
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(1280, 800)
+    if shown:
+        w.show()
+        qtbot.waitExposed(w)
+    if settings:
+        w.show_settings(True)
+    w.grab()
+    center = w.title_bar.parentWidget()
+    t = w.panel_toggle
+    right = t.mapTo(center, t.rect().topLeft()).x() + t.width()
+    assert center.width() - right == 16
+    assert (
+        w.title_bar.mapTo(w, w.title_bar.rect().center()).y()
+        == w.panel_toggle.mapTo(w, w.panel_toggle.rect().center()).y()
+    )

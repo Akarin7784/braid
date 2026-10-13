@@ -13,6 +13,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "braid.theme" = ["*.qss"]
 "braid.assets" = ["*.png", "*.svg"]
+"braid.assets.shadows" = ["*.png"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.6", "mypy>=1.11", "pyinstaller>=6.10"]

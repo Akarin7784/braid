@@ -112,3 +112,8 @@ QMenu::section { color: #73736F; font-size: 12px; padding: 8px 12px 4px 12px; }
 QToolButton[role="modelChip"] { background: #30302F; border-radius: 12px; padding: 4px 34px 4px 12px; font-size: 12px; }
 QToolButton[role="modelChip"]:hover, QToolButton[role="modelChip"][popupOpen="true"] { background: #343433; }
 QToolButton[role="modelChip"]::menu-indicator { image: none; width: 0px; }
+
+/* 窗口控制按钮（浮层，右上角）：28×28，图标由代码按 color 着色 */
+QToolButton[role="windowControl"] { background: transparent; border: none; border-radius: 8px; color: #A3A3A0; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0; }
+QToolButton[role="windowControl"]:hover { background: #343433; }
+QToolButton[role="windowControl"][kind="close"]:hover { background: #E5484D; color: #FFFFFF; }

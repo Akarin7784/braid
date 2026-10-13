@@ -97,8 +97,7 @@ jobs:
             xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider --junitxml=junit-$i.xml || exit 1
           done
           echo "== 1.5 倍缩放 =="
-          # 先只告警，#21 和 md_render 的缩放修复合进来后改成失败
-          QT_SCALE_FACTOR=1.5 xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider || echo "::warning::1.5 倍缩放下有测试失败"
+          QT_SCALE_FACTOR=1.5 xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider || exit 1
       - name: 截设计走查图
         env: {QT_QPA_PLATFORM: xcb}
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python benchmarks/shots.py shots

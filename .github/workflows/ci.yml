@@ -43,6 +43,11 @@ jobs:
                   f = f"braid/assets/icons/nav_{k}_{m}.png"
                   if f not in names:
                       miss.add(f)
+          for k in ("open", "closed"):
+              for m in ("light", "dark"):
+                  f = f"braid/assets/icons/eye_{k}_{m}.png"
+                  if f not in names:
+                      miss.add(f)
           assert not miss, f"wheel 缺少: {sorted(miss)}"
           print("wheel 资源齐全")
           PY
@@ -117,6 +122,11 @@ jobs:
           for k in back forward reload stop external; do
             for m in light dark; do
               find dist -path "*braid/assets/icons/nav_${k}_${m}.png" | grep -q . || { echo "缺少 nav_${k}_${m}.png"; miss=1; }
+            done
+          done
+          for k in open closed; do
+            for m in light dark; do
+              find dist -path "*braid/assets/icons/eye_${k}_${m}.png" | grep -q . || { echo "缺少 eye_${k}_${m}.png"; miss=1; }
             done
           done
           [ "$miss" -eq 0 ]

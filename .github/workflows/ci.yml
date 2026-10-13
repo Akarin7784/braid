@@ -96,6 +96,9 @@ jobs:
             echo "== 第 $i 轮 =="
             xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider --junitxml=junit-$i.xml || exit 1
           done
+          echo "== 1.5 倍缩放 =="
+          # 先只告警，#21 和 md_render 的缩放修复合进来后改成失败
+          QT_SCALE_FACTOR=1.5 xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider || echo "::warning::1.5 倍缩放下有测试失败"
       - name: 截设计走查图
         env: {QT_QPA_PLATFORM: xcb}
         run: xvfb-run -a -s "-screen 0 1600x1000x24" python benchmarks/shots.py shots
@@ -116,7 +119,9 @@ jobs:
       - run: pip install -e ".[dev]"
       - name: 浏览器相关测试
         env: {QT_QPA_PLATFORM: xcb, QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox"}
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" pytest -v -m webengine
+        run: |
+          # 还没有 webengine 测试时 pytest 退出码是 5（没选中测试），不算失败
+          xvfb-run -a -s "-screen 0 1600x1000x24" pytest -v -m webengine || [ $? -eq 5 ]
       - name: 冷启动门槛（不得加载 WebEngine，且 ≤1.5s）
         env: {QT_QPA_PLATFORM: offscreen}
         run: |

@@ -330,7 +330,8 @@ CODE_VPAD = 12  # 代码块上下内边距
 CODE_FONT_PX = 12
 CODE_LINE_H = 20
 TOGGLE_H = 24  # “展开 N 行”一栏高度（叠在渐隐区上）
-FADE_H = 32  # 折叠代码块底部渐隐高度
+FADE_H = 48  # 折叠代码块底部渐隐高度（约两行半，“展开 N 行”叠在其底部）
+TOGGLE_BOTTOM = 8  # “展开 N 行”距代码块底边
 GAP = 12  # 段落 / 表格 / 代码块之间的统一间距
 COPIED_MS = 1500
 
@@ -629,7 +630,7 @@ class ChatDelegate(QStyledItemDelegate):
             copy = QRect(r.right() - 68, r.top() + 4, 64, 20)
             tog = QRect()
             if info.collapsed:
-                tog = QRect(r.x(), r.bottom() - TOGGLE_H + 1, r.width(), TOGGLE_H)
+                tog = QRect(r.x(), r.bottom() - TOGGLE_BOTTOM - TOGGLE_H + 1, r.width(), TOGGLE_H)
             elif info.collapsible:
                 tog = QRect(r.right() - 116, r.top() + 4, 44, 20)
             out.append((info, r, copy, tog))
@@ -637,8 +638,8 @@ class ChatDelegate(QStyledItemDelegate):
 
     @staticmethod
     def fade_rect(code_rect: QRect) -> QRect:
-        """折叠代码块底部渐隐区：最后 TOGGLE_H（标签栏）+ FADE_H。"""
-        h = FADE_H + TOGGLE_H
+        """折叠代码块底部渐隐区：最后 FADE_H，“展开 N 行”叠在其底部。"""
+        h = FADE_H
         return QRect(code_rect.x(), code_rect.bottom() - h + 1, code_rect.width(), h)
 
     def sizeHint(
@@ -728,7 +729,7 @@ class ChatDelegate(QStyledItemDelegate):
                 clear = QColor(code_bg)
                 clear.setAlpha(0)
                 grad.setColorAt(0.0, clear)
-                grad.setColorAt(0.55, code_bg)
+                grad.setColorAt(0.7, code_bg)
                 grad.setColorAt(1.0, code_bg)
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QBrush(grad))

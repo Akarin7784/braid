@@ -144,7 +144,8 @@ def test_collapsed_fade_painted(qtbot):
     info, r, _c, tog = codes[0]
     assert info.collapsed
     fade = v.delegate.fade_rect(r)
-    assert fade.height() >= 32 + chat_view.TOGGLE_H - 1 and fade.contains(tog.center())
+    assert fade.height() == chat_view.FADE_H == 48 and fade.contains(tog.center())
+    assert r.bottom() - tog.bottom() == chat_view.TOGGLE_BOTTOM
     img = v.grab().toImage()
     bg = img.pixelColor(r.x() + 4, r.top() + 4)  # 代码块底色
     # 渐隐区中间应已基本是底色，而上方代码行区域不受影响

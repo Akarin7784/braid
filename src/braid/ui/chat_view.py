@@ -798,7 +798,8 @@ class ChatDelegate(QStyledItemDelegate):
         widget = option.widget
         if isinstance(widget, QAbstractItemView):
             vis = widget.viewport().rect().intersected(rect)
-            ctx.clip = QRectF(vis.translated(-(bubble.x() + PAD), -(bubble.y() + PAD)))
+            if not vis.isEmpty():
+                ctx.clip = QRectF(vis.translated(-(bubble.x() + PAD), -(bubble.y() + PAD)))
         ctx.palette.setColor(QPalette.ColorRole.Text, QColor(THEME[self.dark]["text"]))
         doc.documentLayout().draw(painter, ctx)
         painter.restore()

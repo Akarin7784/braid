@@ -3,7 +3,7 @@ import sys
 
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QFont, QMouseEvent
 from PySide6.QtWidgets import QApplication
 
 from braid.theme.palette import tokens as _pal
@@ -292,3 +292,100 @@ def test_tab_row_aligned_with_title_row(qtbot):
     w._place_controls()
     g = w.controls.geometry()
     assert abs(g.top() + g.height() / 2 - 22) <= 0.5
+
+
+@pytest.fixture
+def big_font_window(qtbot):
+    """模拟 Windows 上更宽的 UI 字体（Segoe UI / 微软雅黑）：窗口字体放大 1.4 倍。"""
+    from braid.backends.mock import MockBackend
+    from braid.ui.main_window import MainWindow
+
+    w = MainWindow(MockBackend())
+    f = QFont(w.font())
+    f.setPointSizeF(f.pointSizeF() * 1.4)
+    w.setFont(f)
+    qtbot.addWidget(w)
+    w.resize(1280, 800)
+    w.show()
+    qtbot.waitExposed(w)
+    qtbot.waitUntil(lambda: sum(w.splitter.sizes()) > 0)
+    QApplication.processEvents()
+    return w
+
+
+def test_big_font_panel_min_is_320(big_font_window):
+    from braid.ui.panel.shell import splitter_min_width
+    from braid.ui.window_controls import WindowControls
+
+    w = big_font_window
+    p = w.panel
+    # 字体变大不应抬高面板最小宽度（Windows CI 上曾被抬到 448）
+    assert splitter_min_width(p) == MIN_WIDTH
+    assert p.minimumSizeHint().width() <= MIN_WIDTH
+    p.set_panel_width(MIN_WIDTH)
+    QApplication.processEvents()
+    w._place_controls()
+    assert p.width() == MIN_WIDTH
+    assert _gap(w) >= 16  # 浮层按钮不压最后一个标签
+    last = p.tabs[-1]
+    assert last.mapTo(p, last.rect().topRight()).x() + 1 + WindowControls.reserved_width() + 16 <= (
+        p.width()
+    )
+    assert all(t.width() >= 28 for t in p.tabs)
+    _assert_no_tab_scrolling(p)
+    # 放大字体并压缩可用空间：标签必须右侧省略（…），全名不变，且不出现滚动条/滚动箭头
+    p.tab_row.setStyleSheet('QPushButton[role="panelTab"] { font-size: 22px; }')
+    p.set_trailing_reserve(WindowControls.reserved_width() + 16 + 60)
+    QApplication.processEvents()
+    assert p.width() == MIN_WIDTH
+    assert any(t.is_elided() for t in p.tabs)
+    for t in p.tabs:
+        if t.is_elided():
+            shown = t.elided_text()
+            assert shown.endswith("…") and shown != t.text()
+        assert t.text() in TAB_NAMES
+        assert t.geometry().right() < p.tab_row.width()  # 不溢出标签行
+    _assert_no_tab_scrolling(p)
+    w._place_controls()
+    assert _gap(w) >= 16
+
+
+def _assert_no_tab_scrolling(p):
+    from PySide6.QtWidgets import QAbstractScrollArea, QScrollBar, QTabBar, QToolButton
+
+    row = p.tab_row
+    assert not row.findChildren(QScrollBar)
+    assert not row.findChildren(QAbstractScrollArea)
+    assert not row.findChildren(QTabBar)  # 无 QTabBar 自带的滚动箭头
+    assert not [b for b in row.findChildren(QToolButton) if b.isVisible()]
+
+
+def test_big_font_narrow_window_keeps_chat_min(big_font_window):
+    from braid.ui.panel.shell import splitter_min_width
+
+    w = big_font_window
+    p, split = w.panel, w.splitter
+    chat = split.widget(split.indexOf(p) - 1)
+    chat_min = splitter_min_width(chat)
+    # 把中栏和右栏的富余都去掉：右栏应先缩到 320，中栏不低于其最小宽度
+    slack = (chat.width() - chat_min) + (p.width() - MIN_WIDTH)
+    w.resize(max(w.minimumWidth(), w.width() - slack), 700)
+    QApplication.processEvents()
+    assert chat.width() >= chat_min
+    assert p.width() >= MIN_WIDTH
+    p.set_panel_width(MAX_WIDTH)
+    QApplication.processEvents()
+    assert chat.width() >= chat_min and MIN_WIDTH <= p.width() <= MAX_WIDTH
+    p.set_panel_width(MIN_WIDTH)
+    QApplication.processEvents()
+    assert p.width() == MIN_WIDTH and chat.width() >= chat_min
+
+
+def test_tab_elides_when_squeezed(qtbot):
+    from braid.ui.panel.shell import TAB_MIN_W, PanelTab
+
+    t = PanelTab("很长很长的标签名字")
+    qtbot.addWidget(t)
+    assert t.minimumSizeHint().width() == TAB_MIN_W
+    t.resize(40, 28)
+    assert t.is_elided() and t.text() == "很长很长的标签名字"

@@ -18,6 +18,9 @@ from PySide6.QtWidgets import (
     QSplitter,
     QSplitterHandle,
     QStackedWidget,
+    QStyle,
+    QStyleOptionButton,
+    QStylePainter,
     QVBoxLayout,
     QWidget,
 )
@@ -109,6 +112,42 @@ class ResizeGrip(QWidget):
         self._start = None
 
 
+TAB_MIN_W = 28  # 标签空间不够时可压到的最小宽度（文字省略）
+
+
+class PanelTab(QPushButton):
+    """标签按钮：最小宽度与字体无关；空间不足时文字按宽度省略，``text()`` 仍是全名。"""
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        # QPushButton 默认横向 Minimum（不可小于 sizeHint），会挤占右侧留空；改为可压缩
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(TAB_MIN_W, TAB_H)
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        opt.text = self.elided_text()
+        p = QStylePainter(self)
+        p.drawControl(QStyle.ControlElement.CE_PushButton, opt)
+        p.end()
+
+    def elided_text(self) -> str:
+        """按当前宽度右侧省略后的显示文字（左右内边距各 12）。"""
+        fm = self.fontMetrics()
+        full = self.text()
+        if fm.horizontalAdvance(full) <= self.contentsRect().width() - 24:
+            return full
+        # 空间紧张时内边距让给文字，但至少保留省略号
+        avail = max(0, self.contentsRect().width() - 8)
+        return fm.elidedText(full, Qt.TextElideMode.ElideRight, avail) or "…"
+
+    def is_elided(self) -> bool:
+        return self.elided_text() != self.text()
+
+
 class PanelTabRow(QWidget):
     """标签行。提供与 QTabBar 相同的 ``count()`` / ``tabRect(i)``，供主窗口定位浮层按钮。"""
 
@@ -118,6 +157,20 @@ class PanelTabRow(QWidget):
 
     def count(self) -> int:
         return len(self.buttons)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        # 不随字体变大：标签可压缩省略；右侧留空（窗口按钮）是固定宽度的 spacer，不能压缩
+        lay = self.layout()
+        reserve = 0
+        if lay is not None:
+            for k in range(lay.count()):
+                it = lay.itemAt(k)
+                if it is not None and it.spacerItem() is not None:
+                    reserve += it.sizeHint().width()
+            gaps = lay.spacing() * max(0, len(self.buttons) - 1)
+        else:
+            gaps = 0
+        return QSize(TAB_MIN_W * len(self.buttons) + gaps + reserve, TAB_ROW_H)
 
     def tabRect(self, i: int) -> QRect:  # noqa: N802
         return self.buttons[i].geometry()
@@ -174,7 +227,8 @@ class RightPanel(QFrame):
         self._pending_width: int | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(panel_qss(mode))
-        # 不设最小宽度：主窗口收起/展开动画需要把宽度压到 0；拖动范围由 ResizeGrip 钳制
+        # 最小宽度显式定为 320（QSplitter 优先用显式 minimumWidth），不随字体/内容变大
+        self.setMinimumWidth(MIN_WIDTH)
         self.setMaximumWidth(MAX_WIDTH)
 
         root = QVBoxLayout(self)
@@ -190,7 +244,7 @@ class RightPanel(QFrame):
         self.tab_group = QButtonGroup(self, exclusive=True)
         self.tabs: list[QPushButton] = []
         for i, name in enumerate(TAB_NAMES):
-            b = QPushButton(name)
+            b = PanelTab(name)
             b.setCheckable(True)
             b.setProperty("role", "panelTab")
             b.setFixedHeight(TAB_H)
@@ -216,6 +270,7 @@ class RightPanel(QFrame):
         root.addWidget(row)
 
         self.stack = QStackedWidget()
+        self.stack.setMinimumWidth(1)  # 页面内容的最小宽度不向上传播到面板
         root.addWidget(self.stack, 1)
         # 浏览器页延迟创建：首次切到该标签才 import（将来 QtWebEngine 在那里导入）
         self.stack.addWidget(QWidget())

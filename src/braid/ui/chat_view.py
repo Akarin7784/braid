@@ -11,6 +11,8 @@ import re
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import Any
 
 from PySide6.QtCore import (
     QAbstractListModel,
@@ -258,10 +260,20 @@ class StreamBuffer(QObject):
         self.model.finalize(row)
 
 
+@lru_cache(maxsize=32)
+def _lexer(lang: str) -> Any:
+    """按语言名缓存 Pygments lexer；首次构造要编译一堆正则（几十 ms）。"""
+    from pygments.lexers import TextLexer, get_lexer_by_name
+
+    try:
+        return get_lexer_by_name(lang)
+    except Exception:
+        return TextLexer()
+
+
 def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
     """给 Markdown 渲染出的代码块按 Pygments token 上色（没装 Pygments 时跳过）。"""
     try:
-        from pygments.lexers import TextLexer, get_lexer_by_name
         from pygments.styles import get_style_by_name
     except ImportError:
         return
@@ -281,10 +293,7 @@ def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
         ):
             lines.append(block.text())
             block = block.next()
-        try:
-            lexer = get_lexer_by_name(str(lang or "text"))
-        except Exception:
-            lexer = TextLexer()
+        lexer = _lexer(str(lang or "text"))
         cur = QTextCursor(doc)
         pos = start.position()
         for ttype, value in lexer.get_tokens("\n".join(lines)):

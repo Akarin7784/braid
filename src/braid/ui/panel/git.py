@@ -31,7 +31,6 @@ from braid.core.git import DiffLine, FileChange, GitSource
 from braid.theme.menu import RoundedMenu, is_dark
 from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
-from braid.ui.panel.tokens import tokens
 
 ROW_H = 28  # 文件行高
 DIFF_FONT_PX, DIFF_LINE_H, LINENO_W = 12, 20, 26
@@ -59,7 +58,7 @@ def mono_font(px: int = DIFF_FONT_PX) -> QFont:
 
 
 def git_qss(mode: str = "light") -> str:
-    t = tokens(mode)
+    t = palette(mode == "dark")
     return f"""
 #GitFilesCard, #GitDiffCard, #GitCommitCard {{ background: {t["surface"]}; border-radius: 14px; }}
 #BranchChip {{ background: {t["control"]}; color: {t["text"]}; border: none;

@@ -57,7 +57,6 @@ from braid.core.browser import BrowserController
 from braid.theme.menu import is_dark
 from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
-from braid.ui.panel.tokens import tokens
 
 
 def nav_icon_path(name: str, dark: bool) -> Traversable:
@@ -113,7 +112,7 @@ def _c(hex_: str, alpha_mul: float = 1.0) -> QColor:
 
 
 def browser_qss(mode: str = "light") -> str:
-    t = tokens(mode)
+    t = palette(mode == "dark")
     return f"""
 QPushButton[role="navButton"] {{ min-width: {ROW_H}px; max-width: {ROW_H}px;
     min-height: {ROW_H}px; max-height: {ROW_H}px; border: none; border-radius: 10px;

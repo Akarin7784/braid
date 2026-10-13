@@ -116,13 +116,13 @@ def test_navigation_and_history(qtbot):
 def test_loading_reload_becomes_stop(qtbot):
     p = _page(qtbot)
     p.view.loadStarted.emit()
-    assert p.reload_btn.text() == "✕" and p.progress.isVisible()
+    assert p.reload_btn.property("navIcon") == "stop" and p.progress.isVisible()
     p.view.loadProgress.emit(40)
     assert tokens(False)["brand"] in p.progress.styleSheet()
     p.reload_btn.click()
     assert p.view.calls[-1] == "stop"
     p.view.loadFinished.emit(True)
-    assert p.reload_btn.text() == "↻" and not p.progress.isVisible()
+    assert p.reload_btn.property("navIcon") == "reload" and not p.progress.isVisible()
     p.reload_btn.click()
     assert p.view.calls[-1] == "reload"
 
@@ -255,6 +255,16 @@ def test_nav_icons_loaded(qtbot, monkeypatch, tmp_path):
     assert p.reload_btn.property("navIcon") == "stop" and p.reload_btn.text() == ""
     p.set_loading(False)
     assert p.reload_btn.property("navIcon") == "reload"
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_packaged_nav_icons_load(qtbot, dark):
+    for n in ("back", "forward", "reload", "stop", "external"):
+        assert bmod.load_nav_icon(n, dark) is not None, n
+    p = BrowserPage(web_factory=FakeView, theme="dark" if dark else "light")
+    qtbot.addWidget(p)
+    for b in (p.back_btn, p.forward_btn, p.reload_btn, p.external_btn):
+        assert b.text() == "" and not b.icon().isNull()
 
 
 def test_disabled_nav_opacity(qtbot):

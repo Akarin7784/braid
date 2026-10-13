@@ -5,6 +5,7 @@ from braid.backends.mock_git import MockGitSource
 from braid.core.git import DiffLine
 from braid.theme import palette
 from braid.theme.menu import RoundedMenu
+from braid.theme.palette import tokens as _pal
 from braid.ui.panel import RightPanel
 from braid.ui.panel.git import (
     CONT_MARK,
@@ -17,7 +18,10 @@ from braid.ui.panel.git import (
     DiffView,
     GitPage,
 )
-from braid.ui.panel.tokens import tokens
+
+
+def tokens(mode):
+    return _pal(mode == "dark")
 
 
 def _page(qtbot, op_ms=30):
@@ -199,3 +203,42 @@ def test_palette_cached_and_paint_time(qtbot, monkeypatch):
         assert row.letter.color().name().upper() == "#E2685B"
     finally:
         QApplication.instance().setProperty("braidDark", False)
+
+
+def test_branch_menu_check_qss(qtbot):
+    from PySide6.QtGui import QImage
+
+    from braid.theme import load_qss
+
+    app = QApplication.instance()
+    old = app.styleSheet()
+    qss = load_qss("light")
+    assert "QMenu::indicator:checked" in qss and "check_light.png" in qss
+    app.setStyleSheet(qss)
+    try:
+        _, p = _page(qtbot)
+        p._branch_menu()
+        m = p._menu
+        m.ensurePolished()
+        m.adjustSize()
+        img = QImage(m.size(), QImage.Format.Format_ARGB32)
+        img.fill(0)
+        m.render(img)
+        acts = m.actions()
+        cur = next(a for a in acts if a.isChecked())
+        other = next(a for a in acts if not a.isChecked())
+
+        def ink(a):
+            g = m.actionGeometry(a)
+            n = 0
+            for x in range(g.left(), g.left() + 40):
+                for y in range(g.top(), g.bottom()):
+                    c = img.pixelColor(x, y)
+                    if c.alpha() and c.lightness() < 200:
+                        n += 1
+            return n
+
+        assert ink(cur) > ink(other) + 5  # 当前分支左侧画出了对勾
+        m.close()
+    finally:
+        app.setStyleSheet(old)

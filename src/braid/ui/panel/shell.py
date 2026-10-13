@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from braid.core.artifacts import ArtifactSource
 from braid.core.browser import BrowserController
 from braid.core.git import GitSource
-from braid.ui.panel.tokens import tokens
+from braid.theme.palette import tokens as palette
 
 DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH = 420, 320, 720
 TAB_ROW_H, TAB_H = 52, 28
@@ -33,7 +33,7 @@ def clamp_width(w: int) -> int:
 
 
 def panel_qss(mode: str = "light") -> str:
-    t = tokens(mode)
+    t = palette(mode == "dark")
     return f"""
 #RightPanel {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
     stop:0 {t["pn_a"]}, stop:1 {t["pn_b"]}); border: none; }}

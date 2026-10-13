@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.artifacts import Artifact, ArtifactSource
+from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
-from braid.ui.panel.tokens import tokens
 
 MODES = ("preview", "source", "diff")
 MODE_LABELS = {"preview": "预览", "source": "源码", "diff": "Diff"}
@@ -33,7 +33,7 @@ COPIED_TEXT, COPIED_MS, FADE_MS = "已复制 ✓", 1500, 220
 
 
 def artifacts_qss(mode: str = "light") -> str:
-    t = tokens(mode)
+    t = palette(mode == "dark")
     return f"""
 #PreviewCard, QFrame[role="artifactCard"] {{ background: {t["surface"]}; border-radius: 14px; }}
 QFrame[role="artifactCard"][selected="true"] {{ background: {t["active"]}; }}
@@ -69,7 +69,7 @@ def human_size(n: int) -> str:
 def diff_html(old: str, new: str, mode: str = "light") -> str:
     """与 Git 面板一致的 diff 着色：加行 success 底、删行 danger 底。"""
     add_bg, del_bg = ("#5CC28A26", "#E2685B26") if mode == "dark" else ("#2E8B571F", "#C0392B1A")
-    t = tokens(mode)
+    t = palette(mode == "dark")
     rows = []
     for ln in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=3):
         if ln.startswith(("---", "+++")):

@@ -6,9 +6,13 @@ from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 
+from braid.theme.palette import tokens as _pal
 from braid.ui.panel import RightPanel
 from braid.ui.panel.shell import MAX_WIDTH, MIN_WIDTH, TAB_H, TAB_NAMES, TAB_ROW_H, clamp_width
-from braid.ui.panel.tokens import tokens
+
+
+def tokens(mode):
+    return _pal(mode == "dark")
 
 
 def test_tabs_switch(qtbot):

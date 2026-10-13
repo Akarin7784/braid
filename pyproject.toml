@@ -36,6 +36,9 @@ check_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 qt_api = "pyside6"
-markers = ["benchmark: 启动时间基准"]
+markers = [
+    "benchmark: 启动时间基准",
+    "webengine: 依赖/涉及 QtWebEngine 浏览器标签页",
+]
 # 配合环境变量 PYTHONWARNDEFAULTENCODING=1（CI 已设置）：漏写 encoding 直接报错
 filterwarnings = ["error::EncodingWarning"]

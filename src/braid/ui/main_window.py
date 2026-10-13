@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QRectF, Qt, QVariantAnimation
 from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -11,12 +11,13 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSpacerItem,
-    QSplitter,
-    QTabBar,
     QVBoxLayout,
     QWidget,
 )
 
+from braid.backends.mock_artifacts import MockArtifactSource
+from braid.backends.mock_browser import MockBrowserController
+from braid.backends.mock_git import MockGitSource
 from braid.core.backend import AgentBackend, Session
 from braid.core.session_store import SessionStore
 from braid.core.settings import settings
@@ -24,6 +25,8 @@ from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
 from braid.ui.icon_button import IconButton
+from braid.ui.panel import RightPanel
+from braid.ui.panel.shell import PanelSplitter
 from braid.ui.sidebar import Sidebar
 from braid.ui.window_controls import RIGHT_MARGIN, WindowControls
 
@@ -111,24 +114,17 @@ class MainWindow(QMainWindow):
         self.chat.editRequested.connect(composer.set_text)
         cl.addWidget(composer)
 
-        self.panel = panel = QFrame()
-        panel.setObjectName("SidePanel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(12, 12, 12, 12)
-        self.panel_tabs = tabs = QTabBar()
-        tabs.setObjectName("PanelTabs")
-        tabs.setDrawBase(False)
-        for t in ("浏览器", "Git", "Diff", "终端", "任务"):
-            tabs.addTab(t)
-        tab_row = QHBoxLayout()
-        tab_row.addWidget(tabs)
-        tab_row.addWidget(DragArea(minimumHeight=24), 1)
-        # 最后一个标签与按钮至少 16px；面板右内边距 12px 已计入
-        tab_row.addSpacing(WindowControls.reserved_width() + 16 - 12)
-        pl.addLayout(tab_row)
-        pl.addWidget(QLabel("面板内容（模拟）", alignment=Qt.AlignmentFlag.AlignCenter), 1)
+        self.artifact_source = MockArtifactSource()
+        self.panel = panel = RightPanel(
+            artifact_source=self.artifact_source,
+            git_source=MockGitSource(),
+            browser_controller=MockBrowserController(),
+        )
+        self.panel_tabs = panel.tab_row
+        # 最后一个标签与浮层按钮至少 16px
+        panel.set_trailing_reserve(WindowControls.reserved_width() + 16)
 
-        split = QSplitter(Qt.Orientation.Horizontal, handleWidth=4, childrenCollapsible=False)
+        split = PanelSplitter(Qt.Orientation.Horizontal, handleWidth=4, childrenCollapsible=False)
         for w in (sidebar, chat, panel):
             split.addWidget(w)
         split.setSizes([240, 620, 420])
@@ -265,7 +261,7 @@ class MainWindow(QMainWindow):
         x = self.width() - RIGHT_MARGIN - c.width()
         if self.panel.isVisible() and self.panel.width() > c.width() + RIGHT_MARGIN:
             tb = self.panel_tabs
-            cy = tb.mapTo(self, tb.rect().center()).y()
+            cy = tb.mapTo(self, QRectF(tb.rect()).center()).y()  # QRect.center() 偶数高度偏上 1px
         else:
             b = self.title_bar
             cy = b.mapTo(self, QPoint(0, 0)).y() + TITLE_H // 2

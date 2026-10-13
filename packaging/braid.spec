@@ -66,7 +66,8 @@ def _qt_module(part):
 
 def _drop(dest):
     parts = Path(dest).parts
-    if "qml" in parts and "Qt" in parts:
+    # Linux/mac 在 PySide6/Qt/qml，Windows 轮子直接是 PySide6/qml
+    if any(a in ("Qt", "PySide6") and b == "qml" for a, b in zip(parts, parts[1:])):
         return True
     if "plugins" in parts and parts.index("plugins") + 1 < len(parts) and parts[parts.index("plugins") + 1] in _DROP_PLUGIN_DIRS:
         return True

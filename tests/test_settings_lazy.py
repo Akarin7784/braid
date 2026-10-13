@@ -269,3 +269,56 @@ def test_mono_font_warmed_after_first_show(qtbot, tmp_path, monkeypatch):
     page.show()  # 只预热一次
     qtbot.wait(sp_mod.WARM_DELAY_MS + 50)
     assert hosts == [page]
+
+
+def test_first_visit_no_blank_frame(qtbot, tmp_path):
+    """首次进入智能体/快捷键：切换时页面已建好，占位页从不绘制，首帧即含页头。"""
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QWidget
+
+    page = _settings(qtbot, tmp_path)
+    page.resize(1100, 760)
+    page.show()
+    qtbot.waitExposed(page)
+    keys = [k for k, _ in NAV]
+    placeholders = {page.stack.widget(i) for i in range(page.stack.count())} - {
+        page.scrolls["models"]
+    }
+    switched: list[tuple[str, bool]] = []
+    page.stack.currentChanged.connect(
+        lambda i: switched.append(
+            (keys[i], dict.__contains__(page.pages, keys[i]))
+            if page.stack.widget(i) not in placeholders
+            else (keys[i], False)
+        )
+    )
+
+    class PaintSpy(QObject):
+        def __init__(self) -> None:
+            super().__init__()
+            self.painted: list[QObject] = []
+
+        def eventFilter(self, obj: QObject, e: QEvent) -> bool:  # noqa: N802
+            if e.type() == QEvent.Type.Paint:
+                self.painted.append(obj)
+            return False
+
+    spy = PaintSpy()
+    for ph in placeholders:
+        ph.installEventFilter(spy)
+    for key in ("agents", "keybinds"):
+        page.show_section(key)  # 同步构建并切换，此时还没跑事件循环
+        header = page.pages[key].header
+        header.title.installEventFilter(spy)
+        spy.painted.clear()
+        qtbot.waitUntil(lambda h=header: h.title in spy.painted, timeout=1000)  # 下一帧
+        assert not set(spy.painted) & placeholders
+        # 下一帧里出现的就是完整页面：截一帧，页头区域不是纯背景色
+        img = page.stack.grab().toImage()
+        title_pos = header.title.mapTo(page.stack, header.title.rect().center())
+        bg = img.pixelColor(2, 2)
+        y = int(title_pos.y() * img.devicePixelRatio())  # grab 是设备像素
+        row = [img.pixelColor(x, y) for x in range(img.width())]
+        assert any(c != bg for c in row)
+    assert switched == [("agents", True), ("keybinds", True)]
+    assert all(isinstance(w, QWidget) for w in placeholders)

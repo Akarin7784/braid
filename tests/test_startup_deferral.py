@@ -26,6 +26,26 @@ def test_deferred_open_does_not_override_user_choice(qtbot):
     assert w._current is target
 
 
+def test_deferred_open_keeps_settings_opened_before_first_frame(qtbot):
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.sidebar.settingsRequested.emit()  # 首帧前点齿轮
+    assert w.settings_open()
+    qtbot.wait(20)
+    assert w.settings_open()
+    assert getattr(w, "_current", None) is None
+
+
+def test_blank_first_frame_shows_only_background(qtbot):
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    # 计时器触发前：对话区没有行、标题为空，ChatView 本身不绘制任何"无会话"占位
+    assert w.chat_view.model().rowCount() == 0
+    assert w.title.text() == ""
+    assert not w.settings_open()
+    qtbot.waitUntil(lambda: w.chat_view.model().rowCount() > 0)
+
+
 def test_deferred_open_skipped_when_window_destroyed(qtbot):
     w = MainWindow(MockBackend())
     w.deleteLater()

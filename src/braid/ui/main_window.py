@@ -167,9 +167,10 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self, self.open_initial_session)
 
     def open_initial_session(self) -> None:
-        """选中第一个会话；用户已经选过（或已打开）则什么也不做。"""
-        if self._sessions and getattr(self, "_current", None) is None:
-            self.sidebar.select(self._sessions[0].id)
+        """选中第一个会话；用户已先打开设置页或选了别的会话则什么也不做。"""
+        if not self._sessions or self.settings_open() or getattr(self, "_current", None):
+            return
+        self.sidebar.select(self._sessions[0].id)
 
     def _open(self, row: int) -> None:
         self.sidebar.select(self._sessions[row].id)

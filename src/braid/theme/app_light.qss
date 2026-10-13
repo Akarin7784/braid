@@ -126,6 +126,15 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingsSubtitle { font-size: 13px; color: #6B6B69; }
 #settingsEmpty { font-size: 13px; color: #9E9E9B; }
 #providerName { font-size: 14px; font-weight: 600; }
+#settingLabel { color: #1F1F1E; }
+#settingCardTitle { color: #6B6B69; font-size: 12px; }
+#fieldLabel { color: #6B6B69; font-size: 12px; }
+QToolButton#textButton { background: transparent; color: #6B6B69; border: none; padding: 4px 6px; border-radius: 6px; }
+QToolButton#textButton:hover { background: #ECECEB; color: #1F1F1E; }
+QToolButton#textButton:disabled { color: #9E9E9B; }
+#testResult { font-size: 12px; }
+QLineEdit#settingsNumber, QComboBox#settingsCombo { background: #F0F0EF; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
+QLineEdit#settingsNumber:focus, QComboBox#settingsCombo:focus { border-color: #C96442; }
 QLineEdit#settingsField { background: #F0F0EF; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
 QLineEdit#settingsField:focus { background: #FFFFFF; border: 1px solid rgba(201, 100, 50, 51); }
 #keyringWarning { background: rgba(178, 106, 0, 26); color: #B26A00; border-radius: 8px; padding: 8px 12px; }

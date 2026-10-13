@@ -190,7 +190,8 @@ class MainWindow(QMainWindow):
         if on and self.settings_page is None:
             from braid.ui.settings_page import SettingsPage
 
-            self.settings_page = SettingsPage()
+            self.settings_page = SettingsPage(backend=self.backend)
+            self.backend.config_changed.connect(self._on_config_changed)
             self._center_layout.insertWidget(
                 self._center_layout.indexOf(self.chat_view), self.settings_page, 1
             )
@@ -208,6 +209,23 @@ class MainWindow(QMainWindow):
             was = getattr(self, "_panel_before_settings", True)
             self._panel_before_settings = None
             self.set_panel_open(bool(was), animate=False)
+
+    def _on_config_changed(self, section: str) -> None:
+        """“通用 → 主题”改动后切换整个应用的深浅色。"""
+        if section != "general":
+            return
+        mode = str(self.backend.get_config("general").get("theme", "light"))
+        from PySide6.QtWidgets import QApplication
+
+        from braid.theme import apply_theme, resolve_dark
+
+        app = QApplication.instance()
+        if app is not None and bool(app.property("braidDark")) == resolve_dark(mode):
+            return  # 只改了别的字段，或主题没变
+        dark = apply_theme(mode)
+        self.chat_view.set_dark(dark)
+        for w in self.findChildren(QWidget):
+            w.update()
 
     def _open_session(self, s: Session) -> None:
         self.show_settings(False)

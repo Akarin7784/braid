@@ -1,5 +1,6 @@
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel
 
 from braid.core import secrets
 from braid.core.providers import Provider, ProviderStore
@@ -49,9 +50,12 @@ def test_fail_backend_shows_warning(qtbot, tmp_path):
     store.upsert(Provider(name="X"))
     page = SettingsPage(store)
     qtbot.addWidget(page)
-    card = page.models.cards()[0]
-    assert not card.warning.isHidden()
-    assert card.warning.text() == secrets.INSTALL_HINT
+    # 只在页顶显示一条，卡片里不再重复
+    notice = page.models.notice
+    assert not notice.isHidden()
+    assert notice.text() == secrets.INSTALL_HINT
+    assert len([w for w in page.findChildren(QLabel) if w.text() == secrets.INSTALL_HINT]) == 1
+    assert notice.parent() is page.models
 
 
 def test_remove_via_confirm(qtbot, tmp_path, monkeypatch):
@@ -194,15 +198,16 @@ def test_title_weight_needs_real_cjk_face(qtbot, tmp_path, monkeypatch):
     from PySide6.QtGui import QFont, QFontDatabase
 
     from braid.ui import settings_page as sp
+    from braid.ui.settings import widgets as spw
 
     page, _ = _page(qtbot, tmp_path)
     f = page.models.title.font()
     assert f.pixelSize() == 18
     assert f.weight() == sp.title_weight(f)
-    monkeypatch.setattr(sp, "resolved_cjk_family", lambda _f: "X")
+    monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: "X")
     monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular"]))
     assert sp.title_weight(f) == QFont.Weight.Normal
     monkeypatch.setattr(QFontDatabase, "styles", staticmethod(lambda _f: ["Regular", "Bold"]))
     assert sp.title_weight(f) == QFont.Weight.DemiBold
-    monkeypatch.setattr(sp, "resolved_cjk_family", lambda _f: None)
+    monkeypatch.setattr(spw, "resolved_cjk_family", lambda _f: None)
     assert sp.title_weight(f) == QFont.Weight.Normal

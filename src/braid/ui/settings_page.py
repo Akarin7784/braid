@@ -428,7 +428,7 @@ class SettingsPage(QWidget):
             if key == "models":
                 w = self.models
             elif key in PAGE_FACTORIES:
-                w = PAGE_FACTORIES[key](self.backend)
+                w = self._make_page(key)
             else:
                 w = PlaceholderPage(label)
             self._install(key, w)
@@ -445,6 +445,27 @@ class SettingsPage(QWidget):
         lay.setSpacing(0)
         lay.addWidget(self.nav)
         lay.addWidget(self.stack, 1)
+
+    def _make_page(self, key: str) -> QWidget:
+        w = PAGE_FACTORIES[key](self.backend)
+        attach = getattr(w, "attach_settings", None)
+        if attach is not None:
+            attach(self)
+        return w
+
+    def reload_pages(self) -> None:
+        """重置全部设置后重建各分区页（服务商页除外，它的数据不受重置影响）。
+
+        推迟到下一轮事件循环：触发它的信号可能来自即将被替换的页面自身。
+        """
+        QTimer.singleShot(0, self, self._reload_pages_now)
+
+    def _reload_pages_now(self) -> None:
+        cur = self.nav.currentRow()
+        for key, _label in NAV:
+            if key != "models" and key in PAGE_FACTORIES:
+                self._install(key, self._make_page(key))
+        self.stack.setCurrentIndex(cur)
 
     def _install(self, key: str, widget: QWidget) -> None:
         scroll = make_scroll(widget, self)

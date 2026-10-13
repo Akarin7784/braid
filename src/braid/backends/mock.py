@@ -122,8 +122,16 @@ def default_config() -> dict[str, dict[str, Any]]:
         "rules": {
             "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", ".cursor/rules/**/*.mdc"]
         },
-        "keybinds": {"leader": "ctrl+x", "send": "enter", "newline": "shift+enter"},
-        "advanced": {"share": "manual", "snapshot": True, "log_level": "info"},
+        # 只存用户改过的项：动作 id → QKeySequence.PortableText；"" 表示清空（见 core.keymap）
+        "keybinds": {},
+        "advanced": {
+            "auto_compact": True,  # 上下文快满时自动压缩
+            "keep_tokens": 20000,  # 压缩时保留的最近 token 数
+            "snapshot": True,  # 记录文件快照，用于撤销智能体的改动
+            "watcher_ignore": ["dist/**", "*.log"],  # 额外的文件监听忽略规则
+            "share": "manual",
+            "log_level": "info",
+        },
     }
 
 
@@ -188,6 +196,17 @@ class MockBackend(AgentBackend):
             raise KeyError(section)
         self._config[section].update(copy.deepcopy(values))
         self.config_changed.emit(section)
+
+    def replace_config(self, section: str, values: dict[str, Any]) -> None:
+        if section not in self._config:
+            raise KeyError(section)
+        self._config[section] = copy.deepcopy(values)
+        self.config_changed.emit(section)
+
+    def reset_config(self) -> None:
+        self._config = default_config()
+        for section in self._config:
+            self.config_changed.emit(section)
 
     def test_connection(self, provider_id: str, base_url: str) -> ConnectionResult:
         """演示：endpoint 以 http 开头算成功，否则失败。"""

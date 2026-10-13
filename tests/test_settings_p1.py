@@ -45,7 +45,9 @@ def test_abstract_api():
 def test_mock_config_roundtrip(qtbot):
     b = MockBackend()
     for sec in CONFIG_SECTIONS:
-        assert isinstance(b.get_config(sec), dict) and b.get_config(sec)
+        assert isinstance(b.get_config(sec), dict)
+        # keybinds 只存用户改过的项，默认为空（见 core.keymap）；其余分区都有默认值
+        assert b.get_config(sec) or sec == "keybinds"
     seen: list[str] = []
     b.config_changed.connect(seen.append)
     b.set_config("general", {"font_size": 16})
@@ -149,8 +151,8 @@ def test_nav_and_placeholders(qtbot, tmp_path):
     assert page.nav.count() == 8
     assert isinstance(page.pages["permissions"], PermissionsPage)
     assert isinstance(page.pages["general"], GeneralPage)
-    for key in ("keybinds", "advanced"):  # agents / rules 在 P2、mcp 在 #46 实现
-        assert isinstance(page.pages[key], PlaceholderPage)
+    # 8 个分区都已实现（P3 起没有占位页）
+    assert not any(isinstance(w, PlaceholderPage) for w in page.pages.values())
     page.nav.setCurrentRow(4)
     assert page.stack.currentWidget() is page.scrolls["mcp"]
     assert page.pages["mcp"].header.title.text() == "MCP 服务"

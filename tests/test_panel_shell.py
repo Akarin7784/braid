@@ -217,3 +217,18 @@ def test_main_window_panel_dark_from_app_property_only(qtbot):
         assert tokens("light")["pn_a"] not in w.panel.styleSheet()
     finally:
         app.setProperty("braidDark", False)
+
+
+def test_tab_row_aligned_with_title_row(qtbot):
+    w = _main_window(qtbot)
+    assert w.panel_open()
+    p = w.panel
+    row = p.tab_row
+    assert row.height() == TAB_ROW_H == 44
+    assert row.mapTo(w, row.rect().topLeft()).y() == 0
+    for b in p.tabs:
+        top = b.mapTo(w, b.rect().topLeft()).y()
+        assert abs(top + b.height() / 2 - 22) <= 0.5
+    w._place_controls()
+    g = w.controls.geometry()
+    assert abs(g.top() + g.height() / 2 - 22) <= 0.5

@@ -28,7 +28,7 @@ from braid.core.git import GitSource
 from braid.theme.palette import tokens as palette
 
 DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH = 420, 320, 720
-TAB_ROW_H, TAB_H = 52, 28
+TAB_ROW_H, TAB_H = 44, 28
 TAB_NAMES = ("浏览器", "Git", "产物")
 BROWSER_TAB, GIT_TAB, ARTIFACTS_TAB = 0, 1, 2
 DEFAULT_TAB = ARTIFACTS_TAB  # 默认不落在浏览器，避免冷启动加载 WebEngine

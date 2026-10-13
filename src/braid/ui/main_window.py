@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QRectF, Qt, QVariantAnimation
 from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -236,7 +236,7 @@ class MainWindow(QMainWindow):
         x = self.width() - RIGHT_MARGIN - c.width()
         if self.panel.isVisible() and self.panel.width() > c.width() + RIGHT_MARGIN:
             tb = self.panel_tabs
-            cy = tb.mapTo(self, tb.rect().center()).y()
+            cy = tb.mapTo(self, QRectF(tb.rect()).center()).y()  # QRect.center() 偶数高度偏上 1px
         else:
             b = self.title_bar
             cy = b.mapTo(self, QPoint(0, 0)).y() + TITLE_H // 2

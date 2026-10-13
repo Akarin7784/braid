@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QEnterEvent,
     QFont,
     QFontDatabase,
+    QFontMetrics,
     QIntValidator,
     QMouseEvent,
     QPainter,
@@ -683,11 +684,21 @@ PLATFORM_MONO = (
 )
 
 
+_MONO_FAMILIES: tuple[str, ...] | None = None
+
+
 def mono_families() -> list[str]:
-    """等宽字体族的回退顺序。
+    """等宽字体族的回退顺序（进程内只算一次；运行期字体库变化不重算）。
 
     tokens.font.mono 的等宽项 → 系统 FixedFont → 平台等宽 → 任意已装等宽 → CJK 回退。
     """
+    global _MONO_FAMILIES
+    if _MONO_FAMILIES is None:
+        _MONO_FAMILIES = tuple(_compute_mono_families())
+    return list(_MONO_FAMILIES)
+
+
+def _compute_mono_families() -> list[str]:
     raw = (files("braid.theme") / "tokens.json").read_text(encoding="utf-8")
     token_list: list[str] = list(json.loads(raw).get("font", {}).get("mono", []))
     db = set(QFontDatabase.families())
@@ -701,6 +712,25 @@ def mono_families() -> list[str]:
         if f and f not in out:
             out.append(f)
     return out
+
+
+def warm_mono_font(host: QWidget | None = None) -> None:
+    """预先解析等宽回退链并完成字体匹配，之后各分区首次 setFont(mono_font()) 不再卡顿。
+
+    只算字体度量不够：在全局 QSS 下给控件首次设置等宽字体时，样式表字体合并与
+    CJK 回退查找要额外约 50ms（且 ``* { font-size: 13px }`` 会覆盖 setFont 的字号）。
+    所以在 host 下用一个不显示的 QLabel 走一遍同样的路径，随后销毁。
+    """
+    f = mono_font(px=12)
+    QFontMetrics(f).horizontalAdvance("Aa0 中文提示词，。")
+    if host is None:
+        return
+    probe = QLabel("Aa0 中文提示词，。", host)
+    probe.hide()
+    probe.setFont(f)
+    probe.ensurePolished()
+    probe.sizeHint()
+    probe.deleteLater()
 
 
 def mono_font(base: QFont | None = None, px: int = 12) -> QFont:

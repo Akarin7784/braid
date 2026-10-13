@@ -7,6 +7,7 @@ ProviderStore / secrets（原有持久化）。
 
 from __future__ import annotations
 
+import threading
 from importlib.resources import files
 from typing import Any
 
@@ -17,7 +18,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPainter, QPaintEvent
+from PySide6.QtGui import QIcon, QPainter, QPaintEvent, QShowEvent
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -53,11 +54,13 @@ from braid.ui.settings.widgets import (  # noqa: F401  旧路径兼容再导出
     number_with_unit,
     resolved_cjk_family,
     title_weight,
+    warm_mono_font,
 )
 
 SIDE_W, CONTENT_MAX, CONTENT_PAD = 180, 640, 24
 CARD_RADIUS, CARD_PAD, CARD_GAP, FIELD_H = 12, 16, 12, 32
 CARD_INNER_GAP = 6
+WARM_DELAY_MS = 120  # 打开设置后多久预热等宽字体
 TEST_DELAY_MS = 400
 SAVED_TEXT = "已保存到系统钥匙串"
 PAGE_TITLE = "模型与服务"
@@ -358,7 +361,13 @@ class ModelsPage(QWidget):
         self._check_timer = QTimer(self)
         self._check_timer.setSingleShot(True)
         self._check_timer.setInterval(0)
-        self._check_timer.timeout.connect(self.run_keyring_check)
+        self._check_timer.timeout.connect(self._start_keyring_check)
+        # 后台线程跑检查（导入 keyring 及其后端约 160ms），本页的定时器轮询结果
+        self._check_result: list[bool] = []
+        self._check_thread: threading.Thread | None = None
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(16)
+        self._poll_timer.timeout.connect(self._poll_keyring_check)
         self._painted = False
         # 状态放在标题行右侧（与标题同行，不挤占副标题宽度，副标题换行不受影响）
         hl = self.header.layout()
@@ -398,10 +407,35 @@ class ModelsPage(QWidget):
             if self.keyring_ok is None:
                 self._check_timer.start()  # 首帧画完后的下一轮事件循环再检查
 
+    def _start_keyring_check(self) -> None:
+        """首帧之后：在后台线程检查钥匙串，不阻塞界面线程。"""
+        if self.keyring_ok is not None or self._check_thread is not None:
+            return
+        out = self._check_result
+        self._check_thread = threading.Thread(
+            target=lambda: out.append(secrets.keyring_available()),
+            name="braid-keyring-check",
+            daemon=True,
+        )
+        self._check_thread.start()
+        self._poll_timer.start()
+
+    def _poll_keyring_check(self) -> None:
+        if not self._check_result:
+            return
+        self._poll_timer.stop()
+        if self.keyring_ok is None:
+            self._apply_keyring_result(self._check_result[0])
+
     def run_keyring_check(self) -> bool:
-        """检查钥匙串（会导入 keyring），更新状态、提示条，并让各 Key 输入框读取。"""
+        """同步检查钥匙串（会导入 keyring），更新状态、提示条，并让各 Key 输入框读取。"""
         self._check_timer.stop()
-        ok = secrets.keyring_available()
+        self._poll_timer.stop()
+        ok = self._check_result[0] if self._check_result else secrets.keyring_available()
+        self._apply_keyring_result(ok)
+        return ok
+
+    def _apply_keyring_result(self, ok: bool) -> None:
         self.keyring_ok = ok
         self.keyring_status.setText(KEYRING_OK if ok else KEYRING_FAIL)
         self.keyring_status.setProperty("state", "ok" if ok else "fail")
@@ -411,7 +445,6 @@ class ModelsPage(QWidget):
         self.notice.setVisible(not ok)
         for c in self.cards():
             c.key.load()
-        return ok
 
     def _combo(self, field: str) -> SettingsCombo:
         cb = SettingsCombo(self)
@@ -523,11 +556,24 @@ class SettingsPage(QWidget):
         self.vbar: OverlayScrollBar = scroll.overlay_bar
         self.nav.currentRowChanged.connect(self._on_row)
         self.nav.setCurrentRow(0)
+        # 首次显示后稍等再预热等宽字体（智能体/规则/快捷键/MCP 首次进入不再付这笔）。
+        # 不用 0ms：那样会和首帧后的钥匙串检查挤在打开设置的同一段里，打开会多卡约 50ms。
+        self._warm_timer = QTimer(self)
+        self._warm_timer.setSingleShot(True)
+        self._warm_timer.setInterval(WARM_DELAY_MS)
+        self._warm_timer.timeout.connect(lambda: warm_mono_font(self))
+        self._warmed = False
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addWidget(self.nav)
         lay.addWidget(self.stack, 1)
+
+    def showEvent(self, e: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(e)
+        if not self._warmed:
+            self._warmed = True
+            self._warm_timer.start()
 
     def built(self) -> list[str]:
         """已经构建的分区 key（按 NAV 顺序）。"""
@@ -584,7 +630,7 @@ class SettingsPage(QWidget):
         self.stack.setCurrentIndex(cur)
 
     def _install(self, key: str, widget: QWidget) -> None:
-        scroll = make_scroll(widget, self)
+        scroll = make_scroll(widget)  # 先在无父状态下装好，插入 stack 时只 polish 一次
         idx = [k for k, _ in NAV].index(key)
         old = self.stack.widget(idx)  # 占位或旧页
         cur = self.stack.currentIndex()

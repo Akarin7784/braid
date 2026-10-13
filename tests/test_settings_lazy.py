@@ -215,3 +215,57 @@ def test_store_with_providers_keys_load_after_check(qtbot, tmp_path):
     page.show()
     qtbot.waitUntil(lambda: card.key.loaded)
     assert card.key.edit.isEnabled()
+
+
+def test_keyring_check_runs_off_ui_thread(qtbot, tmp_path, monkeypatch):
+    import threading
+
+    from braid.core import secrets
+
+    seen: list[str] = []
+
+    def fake() -> bool:
+        seen.append(threading.current_thread().name)
+        return True
+
+    monkeypatch.setattr(secrets, "keyring_available", fake)
+    page = _settings(qtbot, tmp_path)
+    page.resize(1100, 760)
+    page.show()
+    qtbot.waitExposed(page)
+    qtbot.waitUntil(lambda: page.models.keyring_ok is not None, timeout=3000)
+    assert seen == ["braid-keyring-check"]
+    assert page.models.keyring_status.text() == KEYRING_OK
+    assert (
+        page.models._poll_timer.parent() is page.models and not page.models._poll_timer.isActive()
+    )
+
+
+def test_mono_families_memoized(monkeypatch):
+    from PySide6.QtGui import QFontDatabase
+
+    from braid.ui.settings import widgets
+
+    widgets.mono_families()  # 确保已缓存
+    calls: list[int] = []
+    orig = QFontDatabase.families
+    monkeypatch.setattr(QFontDatabase, "families", lambda *a: calls.append(1) or orig(*a))
+    a = widgets.mono_families()
+    a.append("被调用方改动")
+    assert calls == [] and "被调用方改动" not in widgets.mono_families()
+
+
+def test_mono_font_warmed_after_first_show(qtbot, tmp_path, monkeypatch):
+    from braid.ui import settings_page as sp_mod
+
+    hosts: list[object] = []
+    monkeypatch.setattr(sp_mod, "warm_mono_font", lambda host=None: hosts.append(host))
+    page = _settings(qtbot, tmp_path)
+    assert page._warm_timer.parent() is page and not page._warm_timer.isActive()
+    page.show()
+    qtbot.waitExposed(page)
+    qtbot.waitUntil(lambda: hosts == [page], timeout=2000)
+    page.hide()
+    page.show()  # 只预热一次
+    qtbot.wait(sp_mod.WARM_DELAY_MS + 50)
+    assert hosts == [page]

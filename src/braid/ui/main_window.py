@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
             w.installEventFilter(self)
         split.splitterMoved.connect(lambda *_: self._place_controls())
         self._anim: QVariantAnimation | None = None
+        self._panel_before_settings: bool | None = None
         self._place_controls()
         try:
             from braid.theme.shadows import apply_shadow
@@ -179,6 +180,13 @@ class MainWindow(QMainWindow):
         return self.settings_page is not None and not self.settings_page.isHidden()
 
     def show_settings(self, on: bool = True) -> None:
+        entering = on and not self.settings_open()
+        leaving = not on and self.settings_open()
+        if entering:
+            # 进设置时永远先收起右栏，内容区更宽；离开时按进设置前的状态恢复。
+            # 设置页里手动打开过右栏也不记成默认。
+            self._panel_before_settings = self.panel_open()
+            self.set_panel_open(False, animate=False)
         if on and self.settings_page is None:
             from braid.ui.settings_page import SettingsPage
 
@@ -196,6 +204,10 @@ class MainWindow(QMainWindow):
             self.title.setText("设置")
         elif (cur := getattr(self, "_current", None)) is not None:
             self.title.setText(cur.title)
+        if leaving:
+            was = getattr(self, "_panel_before_settings", True)
+            self._panel_before_settings = None
+            self.set_panel_open(bool(was), animate=False)
 
     def _open_session(self, s: Session) -> None:
         self.show_settings(False)

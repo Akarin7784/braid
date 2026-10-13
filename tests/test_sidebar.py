@@ -286,6 +286,35 @@ def test_settings_entry_switches_center(win, qtbot):
     assert not win.settings_open() and win.chat_view.isVisible()
 
 
+@pytest.mark.parametrize("was_open", [True, False])
+def test_settings_collapses_panel_and_restores(win, qtbot, was_open):
+    """进设置时收起右栏；离开时恢复进设置前的开合状态。设置页里手动打开不算默认。"""
+    win.resize(1280, 800)
+    win.show()
+    qtbot.waitExposed(win)
+    win.set_panel_open(was_open, animate=False)
+    win.show_settings(True)
+    assert win.settings_open() and not win.panel_open()
+    # 设置页里手动打开再关掉，离开时仍按进设置前的状态恢复
+    win.set_panel_open(True, animate=False)
+    win.set_panel_open(False, animate=False)
+    win.show_settings(False)
+    assert not win.settings_open()
+    assert win.panel_open() is was_open
+
+
+def test_settings_leave_via_session_restores_panel(win, qtbot):
+    """选会话离开设置页时，同样按进设置前的状态恢复右栏。"""
+    win.resize(1280, 800)
+    win.show()
+    qtbot.waitExposed(win)
+    win.set_panel_open(True, animate=False)
+    win.show_settings(True)
+    assert not win.panel_open()
+    win.sidebar.select(win.sidebar.sessions[1].id)
+    assert not win.settings_open() and win.panel_open()
+
+
 def test_window_min_width_fits_columns(win, qtbot):
     from braid.ui.panel.shell import splitter_min_width
 
@@ -440,6 +469,8 @@ def test_panel_toggle_hugs_center_right(qtbot, settings, shown):
         qtbot.waitExposed(w)
     if settings:
         w.show_settings(True)
+        # 进设置会收起右栏；本用例测的是右栏展开时收起按钮贴中栏右缘
+        w.set_panel_open(True, animate=False)
     w.grab()
     center = w.title_bar.parentWidget()
     t = w.panel_toggle

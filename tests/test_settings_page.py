@@ -63,3 +63,12 @@ def test_remove_via_confirm(qtbot, tmp_path, monkeypatch):
     card.confirm_remove()
     qtbot.waitUntil(lambda: page.models.cards() == [])
     assert store.list() == [] and secrets.get_key(prov.id) is None
+
+
+def test_eye_icon_follows_state(qtbot, tmp_path):
+    page, store = _page(qtbot, tmp_path)
+    page.models.add_provider()
+    key = page.models.cards()[0].key
+    assert key.eye.property("eyeState") == "closed" and not key.eye.icon().isNull()
+    key.toggle_reveal()
+    assert key.eye.property("eyeState") == "open" and not key.eye.icon().isNull()

@@ -44,6 +44,9 @@ ROW_H = 32
 ROW_GAP = 2
 HEADER_TOP, HEADER_TOP_FIRST, HEADER_BOTTOM, HEADER_TEXT_H = 20, 8, 8, 14
 ARROW = 12
+TEXT_X = 20  # 侧栏内所有文字的左边缘
+ARROW_X = 8  # 组标题箭头的左边缘
+PAD = 12  # 侧栏左右内边距（会话行选中底色从这里开始）
 
 
 def _c(name: str, dark: bool) -> QColor:
@@ -76,17 +79,22 @@ class SessionDelegate(QStyledItemDelegate):
         if idx.data(HEADER):
             top = HEADER_TOP_FIRST if idx.data(FIRST) else HEADER_TOP
             band = QRectF(
-                opt.rect.x() + 8, opt.rect.y() + top, opt.rect.width() - 16, HEADER_TEXT_H
+                opt.rect.x() + TEXT_X,
+                opt.rect.y() + top,
+                opt.rect.width() - TEXT_X - PAD,
+                HEADER_TEXT_H,
             )
             c = _c("text3", dark)
             pen = QPen(c, 1.2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             p.setPen(pen)
-            cx, cy = band.x() + ARROW / 2, band.center().y()
+            cy = band.center().y()
             if idx.data(COLLAPSED):
+                cx = opt.rect.x() + ARROW_X + 1.5
                 pts = [QPointF(cx - 1.5, cy - 3), QPointF(cx + 1.5, cy), QPointF(cx - 1.5, cy + 3)]
             else:
+                cx = opt.rect.x() + ARROW_X + 3
                 pts = [QPointF(cx - 3, cy - 1.5), QPointF(cx, cy + 1.5), QPointF(cx + 3, cy - 1.5)]
             p.drawPolyline(pts)
             f = QFont(opt.font)
@@ -94,13 +102,13 @@ class SessionDelegate(QStyledItemDelegate):
             f.setWeight(QFont.Weight.Normal)
             p.setFont(f)
             p.drawText(
-                band.adjusted(ARROW + 4, 0, 0, 0),
+                band,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 idx.data(),
             )
             p.restore()
             return
-        r = QRectF(opt.rect).adjusted(2, ROW_GAP / 2, -2, -ROW_GAP / 2)
+        r = QRectF(opt.rect).adjusted(PAD, ROW_GAP / 2, -PAD, -ROW_GAP / 2)
         sel = bool(opt.state & QStyle.StateFlag.State_Selected)
         if sel:
             p.setPen(Qt.PenStyle.NoPen)
@@ -116,10 +124,10 @@ class SessionDelegate(QStyledItemDelegate):
         p.setFont(f)
         p.setPen(_c("text" if sel else "text2", dark))
         text = p.fontMetrics().elidedText(
-            idx.data() or "", Qt.TextElideMode.ElideRight, int(r.width()) - 20
+            idx.data() or "", Qt.TextElideMode.ElideRight, int(r.width()) - 2 * (TEXT_X - PAD)
         )
         p.drawText(
-            r.adjusted(10, 0, -10, 0),
+            r.adjusted(TEXT_X - PAD, 0, -(TEXT_X - PAD), 0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             text,
         )
@@ -159,26 +167,31 @@ class Sidebar(QFrame):
         self.collapsed: set[str] = set()  # 折叠的组 key
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
+        # 会话列表贴满侧栏宽度，左右留白由委托自己画，组标题箭头才能放到 8px
+        lay.setContentsMargins(0, PAD, 0, PAD)
         lay.setSpacing(6)
+        top_box = QVBoxLayout()
+        top_box.setContentsMargins(PAD, 0, PAD, 0)
+        top_box.setSpacing(6)
+        lay.addLayout(top_box)
         self.new_btn = QPushButton("＋ 新对话")
         self.new_btn.setProperty("variant", "secondary")
         self.new_btn.setObjectName("NewSession")
         self.new_btn.clicked.connect(self.new_session)
-        lay.addWidget(self.new_btn)
+        top_box.addWidget(self.new_btn)
         self.search = QLineEdit(placeholderText="搜索会话")
         self.search.setObjectName("SessionSearch")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _t: self.rebuild())
-        lay.addWidget(self.search)
+        top_box.addWidget(self.search)
         self.entries: dict[str, QPushButton] = {}
         for key, text in (("projects", "项目"), ("artifacts", "产物"), ("schedules", "定时任务")):
             b = QPushButton(text)
             b.setProperty("variant", "ghost")
             b.setObjectName(f"Entry_{key}")
-            b.setStyleSheet("text-align: left; padding: 6px 10px;")
+            b.setStyleSheet(f"text-align: left; padding: 6px {TEXT_X - PAD}px;")
             b.clicked.connect(lambda _c=False, k=key: self.entryTriggered.emit(k))
-            lay.addWidget(b)
+            top_box.addWidget(b)
             self.entries[key] = b
         self.list = QListWidget()
         self.list.setObjectName("SessionList")
@@ -195,7 +208,7 @@ class Sidebar(QFrame):
         lay.addWidget(self.list, 1)
         # 左下角齿轮：打开设置页（中栏切换，不另开窗口）
         foot = QHBoxLayout()
-        foot.setContentsMargins(0, 0, 0, 0)
+        foot.setContentsMargins(PAD, 0, PAD, 0)
         self.settings_btn = IconButton("gear")
         self.settings_btn.setObjectName("SettingsButton")
         self.settings_btn.setToolTip("设置")

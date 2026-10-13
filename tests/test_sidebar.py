@@ -1,6 +1,7 @@
 """侧边栏与浮层窗口控制按钮。"""
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from braid.backends.mock import MockBackend
@@ -327,3 +328,101 @@ def test_slash_new_and_branch(win, qtbot):
     assert win._current is b and b.parent_id == src.id
     assert [m.text for m in b.messages] == [m.text for m in src.messages]
     assert b.project_id == src.project_id
+
+
+def _ink_left(img, y0: int, y1: int, x0: int = 1) -> int | None:
+    """[y0, y1) 设备像素范围内、x0 之后第一个明显不同于背景的列（设备像素）。"""
+    bg = img.pixelColor(2, img.height() // 2)
+    best = None
+    for y in range(y0, y1):
+        for x in range(x0, img.width() // 2):
+            c = img.pixelColor(x, y)
+            d = abs(c.red() - bg.red()) + abs(c.green() - bg.green()) + abs(c.blue() - bg.blue())
+            if d > 60:
+                best = x if best is None else min(best, x)
+                break
+    return best
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_text_left_edges_aligned(qtbot, dark):
+    """走查第 5 条：入口、组标题、会话标题的文字左边缘都在 20px，组标题箭头在 8px。"""
+    from braid.theme import load_qss
+    from braid.ui.sidebar import ARROW_X, HEADER, TEXT_X
+
+    app = QApplication.instance()
+    app.setStyleSheet(load_qss("dark" if dark else "light"))
+    app.setProperty("braidDark", dark)
+    try:
+        s = Sidebar(MockBackend())
+        qtbot.addWidget(s)
+        s.resize(260, 800)
+        s.show()
+        qtbot.waitExposed(s)
+        img = s.grab().toImage()
+        dpr = img.devicePixelRatio()
+
+        def band(w, top: int, bottom: int) -> tuple[int, int]:
+            y = w.mapTo(s, w.rect().topLeft()).y()
+            return int((y + top) * dpr), int((y + bottom) * dpr)
+
+        def near(x: int | None, want: int) -> bool:
+            return x is not None and abs(x / dpr - want) <= 1.5
+
+        for b in s.entries.values():
+            assert near(_ink_left(img, *band(b, 0, b.height())), TEXT_X)
+        vp = s.list.viewport()
+        assert vp.mapTo(s, vp.rect().topLeft()).x() == 0
+        seen = {True: 0, False: 0}
+        for i in range(s.list.count()):
+            it = s.list.item(i)
+            r = s.list.visualItemRect(it)
+            y0, y1 = band(vp, r.top(), r.bottom())
+            if it.data(HEADER):
+                assert near(_ink_left(img, y0, y1), ARROW_X)
+                assert near(_ink_left(img, y0, y1, int((ARROW_X + 8) * dpr)), TEXT_X)
+            elif not it.isSelected():
+                assert near(_ink_left(img, y0, y1), TEXT_X)
+            seen[bool(it.data(HEADER))] += 1
+        assert seen[True] and seen[False]
+    finally:
+        app.setStyleSheet("")
+        app.setProperty("braidDark", False)
+
+
+def test_selected_title_regular_weight(qtbot):
+    """走查第 6 条：深色下选中会话只换 text 色，字重仍是常规。"""
+    from PySide6.QtGui import QFont, QImage, QPainter
+    from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
+
+    from braid.ui.sidebar import SessionDelegate
+
+    app = QApplication.instance()
+    app.setProperty("braidDark", True)
+    try:
+        s = Sidebar(MockBackend())
+        qtbot.addWidget(s)
+        idx = next(
+            s.list.indexFromItem(s.list.item(i))
+            for i in range(s.list.count())
+            if s.list.item(i).data(Qt.ItemDataRole.UserRole)
+        )
+        fonts: list[QFont] = []
+
+        class Spy(QPainter):
+            def setFont(self, f: QFont) -> None:  # noqa: N802
+                fonts.append(QFont(f))
+                super().setFont(f)
+
+        opt = QStyleOptionViewItem()
+        opt.rect = s.list.visualRect(idx)
+        opt.font = QFont(s.list.font())
+        opt.font.setBold(True)  # 即使上游给了粗体也要压回常规
+        opt.state = QStyle.StateFlag.State_Selected
+        img = QImage(300, 40, QImage.Format.Format_ARGB32)
+        p = Spy(img)
+        SessionDelegate(s.list).paint(p, opt, idx)
+        p.end()
+        assert fonts and all(f.weight() == QFont.Weight.Normal and not f.bold() for f in fonts)
+    finally:
+        app.setProperty("braidDark", False)

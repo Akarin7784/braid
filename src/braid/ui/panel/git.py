@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QKeyEvent, QMouseEvent, QPainter, QPaintEvent
+from PySide6.QtCore import QEvent, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QIcon,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,7 +28,8 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.git import DiffLine, FileChange, GitSource
-from braid.theme.menu import RoundedMenu
+from braid.theme.menu import RoundedMenu, is_dark
+from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
 from braid.ui.panel.tokens import tokens
 
@@ -24,7 +37,9 @@ ROW_H = 28  # 文件行高
 DIFF_FONT_PX, DIFF_LINE_H, LINENO_W = 12, 20, 26
 COMMIT_MAX_LINES = 6
 STATUS_TOKEN = {"A": "success", "M": "warning", "D": "danger"}
-SPINNER = "◐◓◑◒"
+SPIN_SIZE, SPIN_WIDTH, SPIN_TICK_MS, SPIN_PERIOD_MS = 12, 1.5, 16, 800
+ARROW_PX = 12
+CONT_MARK = "↪"
 
 
 def qcolor(hex_: str) -> QColor:
@@ -52,6 +67,7 @@ def git_qss(mode: str = "light") -> str:
 #AheadBehind, QLabel[role="groupTitle"], #DiffCaption {{ color: {t["text3"]}; font-size: 12px; }}
 QPushButton[variant="secondary"] {{ background: {t["control"]}; color: {t["text"]};
     border: none; border-radius: 10px; padding: 4px 12px; }}
+QPushButton[variant="secondary"][emphasis="true"] {{ color: {t["brand"]}; }}
 QPushButton[variant="secondary"]:disabled {{ color: {t["text3"]}; }}
 QFrame[role="fileRow"] {{ border-radius: 10px; background: transparent; }}
 QFrame[role="fileRow"]:hover {{ background: {t["hover"]}; }}
@@ -75,13 +91,156 @@ def _repolish(w: QWidget) -> None:
         st.polish(w)
 
 
+class StatusLetter(QWidget):
+    """状态字母 A/M/D：颜色在 paint 时从 palette 取，主题切换后自动跟随。"""
+
+    def __init__(self, status: str) -> None:
+        super().__init__()
+        self.status = status
+        f = QFont()
+        f.setPixelSize(12)
+        f.setWeight(QFont.Weight.DemiBold)
+        self.setFont(f)
+        self.setFixedSize(12, 20)
+
+    def color(self) -> QColor:
+        return QColor(palette(is_dark())[STATUS_TOKEN[self.status]])
+
+    def text(self) -> str:
+        return self.status
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        p = QPainter(self)
+        p.setFont(self.font())
+        p.setPen(self.color())
+        p.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), self.status)
+        p.end()
+
+
+class Spinner(QWidget):
+    """12px 圆弧转圈：线宽 1.5、text2 色，16ms 一帧、0.8s 一圈。父按钮禁用时仍保持原色。"""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(SPIN_SIZE, SPIN_SIZE)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.angle = 0.0
+        self.timer = QTimer(self, interval=SPIN_TICK_MS)
+        self.timer.timeout.connect(self._step)
+        self.hide()
+
+    def _step(self) -> None:
+        self.angle = (self.angle + 360.0 * SPIN_TICK_MS / SPIN_PERIOD_MS) % 360.0
+        self.update()
+
+    def start(self) -> None:
+        self.angle = 0.0
+        self.show()
+        self.raise_()
+        self.timer.start()
+
+    def stop(self) -> None:
+        self.timer.stop()
+        self.hide()
+
+    def color(self) -> QColor:
+        return QColor(palette(is_dark())["text2"])
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self.color(), SPIN_WIDTH)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        m = SPIN_WIDTH / 2
+        r = QRectF(m, m, SPIN_SIZE - 2 * m, SPIN_SIZE - 2 * m)
+        p.drawArc(r, int(-self.angle * 16), 270 * 16)
+        p.end()
+
+
+def arrow_pixmap(up: bool, color: QColor, dpr: float = 2.0) -> QPixmap:
+    """12px 线性小箭头 ↑/↓。"""
+    pm = QPixmap(int(ARROW_PX * dpr), int(ARROW_PX * dpr))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(color, 1.5)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    c, top, bot = 6.0, 2.0, 10.0
+    tip, tail = (top, bot) if up else (bot, top)
+    d = 3.5 if up else -3.5
+    p.drawLine(QRectF(c, tail, 0, 0).topLeft(), QRectF(c, tip, 0, 0).topLeft())
+    p.drawLine(QRectF(c - 3.5, tip + d, 0, 0).topLeft(), QRectF(c, tip, 0, 0).topLeft())
+    p.drawLine(QRectF(c + 3.5, tip + d, 0, 0).topLeft(), QRectF(c, tip, 0, 0).topLeft())
+    p.end()
+    return pm
+
+
+class SyncButton(QPushButton):
+    """Pull / Push：左侧 12px 箭头图标（与文字同色）；执行中图标位置换成圆弧转圈，宽度不变。"""
+
+    def __init__(self, text: str, up: bool) -> None:
+        super().__init__(text)
+        self.up = up
+        self.setProperty("variant", "secondary")
+        self.setIconSize(QSize(ARROW_PX, ARROW_PX))
+        self.spinner = Spinner(self)
+        self.busy = False
+        self.refresh_icon()
+
+    def text_color(self) -> QColor:
+        t = palette(is_dark())
+        if not self.isEnabled():
+            return QColor(t["text3"])
+        return QColor(t["brand"] if self.property("emphasis") else t["text"])
+
+    def refresh_icon(self) -> None:
+        if self.busy:
+            # 透明占位图标保持宽度不变，转圈画在原图标位置
+            pm = QPixmap(ARROW_PX, ARROW_PX)
+            pm.fill(Qt.GlobalColor.transparent)
+            self.setIcon(QIcon(pm))
+        else:
+            self.setIcon(QIcon(arrow_pixmap(self.up, self.text_color())))
+
+    def set_emphasis(self, on: bool) -> None:
+        if bool(self.property("emphasis")) != on:
+            self.setProperty("emphasis", on)
+            _repolish(self)
+        self.refresh_icon()
+
+    def set_busy(self, busy: bool) -> None:
+        self.busy = busy
+        self.setEnabled(not busy)
+        self.refresh_icon()
+        if busy:
+            self._place_spinner()
+            self.spinner.start()
+        else:
+            self.spinner.stop()
+
+    def _place_spinner(self) -> None:
+        fm = QFontMetrics(self.font())
+        content = ARROW_PX + 4 + fm.horizontalAdvance(self.text())
+        x = max(0, (self.width() - content) // 2)
+        self.spinner.move(x, (self.height() - SPIN_SIZE) // 2)
+
+    def resizeEvent(self, e: QResizeEvent) -> None:
+        super().resizeEvent(e)
+        if self.busy:
+            self._place_spinner()
+
+
 class FileRow(QFrame):
     """文件行：路径（等宽 12 text2）+ hover 时的 +/− + 状态字母。"""
 
     clicked = Signal(object, bool)  # FileChange, staged
     toggleStage = Signal(object, bool)
 
-    def __init__(self, fc: FileChange, staged: bool, mode: str = "light") -> None:
+    def __init__(self, fc: FileChange, staged: bool) -> None:
         super().__init__()
         self.fc, self.staged = fc, staged
         self.setProperty("role", "fileRow")
@@ -104,12 +263,7 @@ class FileRow(QFrame):
         self.toggle.hide()
         self.toggle.clicked.connect(lambda: self.toggleStage.emit(self.fc, self.staged))
         lay.addWidget(self.toggle)
-        self.letter = QLabel(fc.status)
-        f = QFont()
-        f.setPixelSize(12)
-        f.setWeight(QFont.Weight.DemiBold)
-        self.letter.setFont(f)
-        self.letter.setStyleSheet(f"color: {tokens(mode)[STATUS_TOKEN[fc.status]]};")
+        self.letter = StatusLetter(fc.status)
         lay.addWidget(self.letter)
 
     def set_selected(self, on: bool) -> None:
@@ -129,52 +283,76 @@ class FileRow(QFrame):
 
 
 class DiffView(QWidget):
-    """自绘 diff：等宽 12px、行高 20，行号 26 宽 text3，加/删行着色底。"""
+    """自绘 diff：等宽 12px、行高 20，行号 26 宽 text3；长行软换行，续行行号列显示 ↪。
+    颜色在 paint 时从 palette 取。"""
 
-    def __init__(self, mode: str = "light") -> None:
+    TEXT_X = 4 + LINENO_W + 4
+
+    def __init__(self) -> None:
         super().__init__()
-        self.mode = mode
         self.lines: list[DiffLine] = []
+        self.rows: list[tuple[int, str, bool]] = []  # (源行下标, 文本片段, 是否续行)
         self.setFont(mono_font())
 
     def set_lines(self, lines: list[DiffLine]) -> None:
         self.lines = list(lines)
-        self.setMinimumHeight(len(self.lines) * DIFF_LINE_H)
-        self.updateGeometry()
+        self._relayout()
+
+    def _relayout(self) -> None:
+        sign = {"add": "+", "del": "-", "ctx": " "}
+        fm = QFontMetrics(self.font())
+        avail = max(fm.horizontalAdvance("M") * 8, self.width() - self.TEXT_X - 4)
+        rows: list[tuple[int, str, bool]] = []
+        for i, ln in enumerate(self.lines):
+            text = f"{sign[ln.kind]} {ln.text}"
+            first = True
+            while True:
+                n = len(text)
+                while n > 1 and fm.horizontalAdvance(text[:n]) > avail:
+                    n -= 1
+                rows.append((i, text[:n], not first))
+                text, first = text[n:], False
+                if not text:
+                    break
+        self.rows = rows
+        h = len(rows) * DIFF_LINE_H
+        if self.minimumHeight() != h:
+            self.setMinimumHeight(h)
+            self.updateGeometry()
         self.update()
 
     def sizeHint(self) -> QSize:
-        return QSize(200, len(self.lines) * DIFF_LINE_H)
+        return QSize(200, len(self.rows) * DIFF_LINE_H)
 
     def line_rect(self, i: int) -> QRect:
         return QRect(0, i * DIFF_LINE_H, self.width(), DIFF_LINE_H)
 
+    def resizeEvent(self, e: QResizeEvent) -> None:
+        super().resizeEvent(e)
+        if e.oldSize().width() != e.size().width():
+            self._relayout()
+
     def paintEvent(self, e: QPaintEvent) -> None:
-        t = tokens(self.mode)
-        dark = self.mode == "dark"
+        dark = is_dark()
+        t = palette(dark)
         bg = {
             "add": qcolor("#5CC28A26" if dark else "#2E8B571F"),
             "del": qcolor("#E2685B26" if dark else "#C0392B1A"),
         }
-        sign = {"add": "+", "del": "-", "ctx": " "}
+        left = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         p = QPainter(self)
         p.setFont(self.font())
-        for i, ln in enumerate(self.lines):
-            r = self.line_rect(i)
+        for r_i, (src, seg, cont) in enumerate(self.rows):
+            ln = self.lines[src]
+            r = self.line_rect(r_i)
             if ln.kind in bg:
                 p.fillRect(r, bg[ln.kind])
             p.setPen(QColor(t["text3"]))
             p.drawText(
-                QRect(4, r.y(), LINENO_W, DIFF_LINE_H),
-                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
-                str(ln.lineno),
+                QRect(4, r.y(), LINENO_W, DIFF_LINE_H), left, CONT_MARK if cont else str(ln.lineno)
             )
             p.setPen(QColor(t["text"]))
-            p.drawText(
-                QRect(4 + LINENO_W + 4, r.y(), r.width(), DIFF_LINE_H),
-                int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
-                f"{sign[ln.kind]} {ln.text}",
-            )
+            p.drawText(QRect(self.TEXT_X, r.y(), r.width(), DIFF_LINE_H), left, seg)
         p.end()
 
 
@@ -220,9 +398,6 @@ class GitPage(QWidget):
         self.setStyleSheet(git_qss(theme))
         self.rows: list[FileRow] = []
         self.selected: tuple[str, bool] | None = None  # (path, staged)
-        self._busy: dict[str, int] = {}
-        self._spin = QTimer(self, interval=120)
-        self._spin.timeout.connect(self._tick)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -236,15 +411,15 @@ class GitPage(QWidget):
         self.branch_chip.setCursor(Qt.CursorShape.PointingHandCursor)
         self.branch_chip.clicked.connect(self._branch_menu)
         top.addWidget(self.branch_chip)
-        self.ahead_behind = QLabel()
-        self.ahead_behind.setObjectName("AheadBehind")
-        top.addWidget(self.ahead_behind)
+        self.ahead_lbl = QLabel()
+        self.behind_lbl = QLabel()
+        for lb in (self.ahead_lbl, self.behind_lbl):
+            lb.setObjectName("AheadBehind")
+            top.addWidget(lb)
         top.addStretch(1)
-        self.pull_btn = QPushButton("↓ Pull")
-        self.push_btn = QPushButton("↑ Push")
+        self.pull_btn = SyncButton("Pull", up=False)
+        self.push_btn = SyncButton("Push", up=True)
         for b, op in ((self.pull_btn, "pull"), (self.push_btn, "push")):
-            b.setProperty("variant", "secondary")
-            b.setProperty("label", b.text())
             b.clicked.connect(getattr(source, op))
             top.addWidget(b)
         lay.addLayout(top)
@@ -270,7 +445,7 @@ class GitPage(QWidget):
         self.diff_caption.setObjectName("DiffCaption")
         self.diff_caption.setFont(mono_font(12))
         dl.addWidget(self.diff_caption)
-        self.diff_view = DiffView(theme)
+        self.diff_view = DiffView()
         self.diff_scroll = QScrollArea()
         self.diff_scroll.setWidgetResizable(True)
         self.diff_scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -317,7 +492,11 @@ class GitPage(QWidget):
         st = self.source.status()
         self.status = st
         self.branch_chip.setText(f"⎇ {st.branch} ▾")
-        self.ahead_behind.setText(f"↑{st.ahead} ↓{st.behind}")
+        self.ahead_lbl.setText(f"↑{st.ahead}")
+        self.ahead_lbl.setVisible(st.ahead > 0)
+        self.behind_lbl.setText(f"↓{st.behind}")
+        self.behind_lbl.setVisible(st.behind > 0)
+        self.push_btn.set_emphasis(st.ahead > 0)
         while (item := self.files_layout.takeAt(0)) is not None:
             if w := item.widget():
                 w.deleteLater()
@@ -328,7 +507,7 @@ class GitPage(QWidget):
             g.setContentsMargins(8, 4, 8, 4)
             self.files_layout.addWidget(g)
             for fc in files:
-                row = FileRow(fc, staged, self.theme)
+                row = FileRow(fc, staged)
                 row.clicked.connect(self.select)
                 row.toggleStage.connect(self._toggle_stage)
                 self.files_layout.addWidget(row)
@@ -393,24 +572,8 @@ class GitPage(QWidget):
         menu.popup(self.branch_chip.mapToGlobal(self.branch_chip.rect().bottomLeft()))
         self._menu = menu
 
-    def _btn(self, op: str) -> QPushButton:
+    def _btn(self, op: str) -> SyncButton:
         return self.pull_btn if op == "pull" else self.push_btn
 
     def _on_busy(self, op: str, busy: bool) -> None:
-        b = self._btn(op)
-        b.setEnabled(not busy)
-        if busy:
-            self._busy[op] = 0
-            self._tick()
-            self._spin.start()
-        else:
-            self._busy.pop(op, None)
-            b.setText(str(b.property("label")))
-            if not self._busy:
-                self._spin.stop()
-
-    def _tick(self) -> None:
-        for op, i in self._busy.items():
-            b = self._btn(op)
-            b.setText(f"{SPINNER[i % len(SPINNER)]} {str(b.property('label')).split(' ', 1)[1]}")
-            self._busy[op] = i + 1
+        self._btn(op).set_busy(busy)

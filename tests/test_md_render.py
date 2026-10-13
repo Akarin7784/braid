@@ -185,3 +185,44 @@ def test_table_row_height_and_padding(qtbot):
     r0 = lay.blockBoundingRect(t.cellAt(0, 0).firstCursorPosition().block())
     r1 = lay.blockBoundingRect(t.cellAt(1, 0).firstCursorPosition().block())
     assert abs((r1.top() - r0.top()) - 28) <= 1
+
+
+NESTED = (
+    "步骤：\n\n1. 安装：\n\n   ```bash\n   pip install braid\n     --pre\n   ```\n\n"
+    "2. 使用：\n\n   ```python\n   import braid\n   ```\n\n完成。\n"
+)
+
+
+def test_parse_fences_nested_in_list():
+    codes = [c for _s, _e, c in parse_code_fences(NESTED)]
+    assert codes == ["pip install braid\n  --pre", "import braid"]
+
+
+def test_nested_code_block_rendered_in_list(qtbot):
+    cache = _DocCache()
+    doc = cache.get(NESTED, 500, False)
+    blocks = cache.code_blocks(doc)
+    assert [b.code for b in blocks] == ["pip install braid\n  --pre", "import braid"]
+    b = doc.begin()
+    code_blocks = []
+    while b.isValid():
+        if b.blockFormat().hasProperty(QTextFormat.Property.BlockCodeFence):
+            code_blocks.append(b)
+        b = b.next()
+    assert [x.text() for x in code_blocks] == ["pip install braid", "  --pre", "import braid"]
+    indent = int(code_blocks[0].blockFormat().indent() * doc.indentWidth())
+    assert indent > 0
+    # 底色矩形与列表内容左缘对齐，而不是贴着消息左边
+    assert all(info.rect.left() == indent for info in blocks)
+    assert all(info.rect.right() == 499 for info in blocks)
+
+
+def test_highlight_does_not_bleed_into_next_list_item(qtbot):
+    doc = _DocCache().get(NESTED, 500, False)
+    b = doc.begin()
+    while b.isValid() and b.text() != "使用：":
+        b = b.next()
+    assert b.isValid()
+    assert b.textList() is not None
+    fg = b.charFormat().foreground()
+    assert fg.style() == 0 or fg.color() == doc.begin().charFormat().foreground().color()

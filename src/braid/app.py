@@ -14,6 +14,10 @@ def _qss(theme: str) -> str:
 
 
 def main() -> int:
+    from braid import selfcheck
+
+    if selfcheck.requested(sys.argv):
+        return selfcheck.run(sys.argv)
     app = QApplication(sys.argv)
     apply_app_font(app)
     theme = "dark" if "--dark" in sys.argv else "light"

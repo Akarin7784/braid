@@ -38,6 +38,10 @@ class ModelInfo:
     provider: str = ""
     # 支持的推理强度档位，按从低到高排列；空表示不支持推理强度
     reasoning_levels: tuple[str, ...] = ()
+    # 模型菜单第二行的一句话说明，如“快速·适合日常”；空则不显示
+    description: str = ""
+    # 模型菜单右侧小标签：能力档位 高 / 中 / 低；空则不显示
+    tier: str = ""
 
 
 @dataclass

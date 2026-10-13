@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from braid.core.backend import ModelInfo
 from braid.core.settings import settings
-from braid.theme.menu import ChipButton, RoundedMenu
+from braid.theme.menu import ChipButton, ModelMenu, RoundedMenu
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,12 @@ DEFAULT_COMMANDS = [
 ]
 PERMISSIONS = [("ask", "每次询问"), ("auto-edit", "自动编辑"), ("full", "完全自主")]
 REASONING_LABELS = {"low": "低", "medium": "中", "high": "高", "max": "最高"}
+REASONING_DESC = {
+    "low": "思考更少，回复更快",
+    "medium": "速度与质量兼顾",
+    "high": "思考更多，适合难题",
+    "max": "思考最充分，耗时最长",
+}
 
 
 class _Input(QTextEdit):
@@ -188,6 +194,7 @@ class Composer(QFrame):
         bar.setSpacing(6)
         self.attach_btn = QPushButton("\U0001f4ce")
         self.attach_btn.setProperty("variant", "ghost")
+        self.attach_btn.setProperty("bar", True)
         self.attach_btn.setToolTip("添加附件")
         self.attach_btn.clicked.connect(self._pick_files)
         bar.addWidget(self.attach_btn)
@@ -198,6 +205,7 @@ class Composer(QFrame):
         self.model_chip.setMenu(self.model_menu)
         self.perm_chip = self._menu_chip(PERMISSIONS, self.permission, "permission")
         for c in (self.model_chip, self.perm_chip):
+            c.setProperty("bar", True)  # 底栏按钮：平时无底，悬停才出 hover 底
             bar.addWidget(c)
         self.set_selection(settings.default_model, settings.default_reasoning)
         bar.addStretch(1)
@@ -242,8 +250,8 @@ class Composer(QFrame):
         return chip
 
     # 模型 × 推理强度 两级菜单
-    def _build_model_menu(self, models: list[ModelInfo]) -> RoundedMenu:
-        menu = RoundedMenu(self)
+    def _build_model_menu(self, models: list[ModelInfo]) -> ModelMenu:
+        menu = ModelMenu(self)
         self._model_actions: dict[str, QAction] = {}
         self._level_actions: dict[tuple[str, str], QAction] = {}
         group = QActionGroup(menu)
@@ -258,6 +266,7 @@ class Composer(QFrame):
                     act = sub.menuAction()
                     for lv in m.reasoning_levels:
                         la = QAction(REASONING_LABELS.get(lv, lv), sub, checkable=True)
+                        ModelMenu.describe(la, REASONING_DESC.get(lv, ""))
                         la.triggered.connect(
                             lambda _=False, mid=m.id, lv=lv: self.set_selection(mid, lv)
                         )
@@ -269,6 +278,7 @@ class Composer(QFrame):
                     act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, ""))
                     menu.addAction(act)
                 act.setCheckable(True)
+                ModelMenu.describe(act, m.description, m.tier)
                 self._model_actions[m.id] = act
         return menu
 
@@ -287,10 +297,7 @@ class Composer(QFrame):
             lv = levels[len(levels) // 2]
         self.model_id, self.reasoning = m.id, lv
         for mid, a in self._model_actions.items():
-            a.setChecked(mid == m.id)
-            f = a.font()
-            f.setBold(mid == m.id)
-            a.setFont(f)
+            a.setChecked(mid == m.id)  # 选中只靠打勾，不加粗、不加底色
         for (mid, l2), a in self._level_actions.items():
             a.setChecked(mid == m.id and l2 == lv)
         self.model_chip.setText(m.name + (f" · {REASONING_LABELS.get(lv, lv)}" if lv else ""))

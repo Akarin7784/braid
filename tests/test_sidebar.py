@@ -155,8 +155,8 @@ def test_selected_bg_uses_active_token():
 
 
 def test_window_control_properties_and_qss_hover(win, qtbot):
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QColor
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QColor, QEnterEvent
     from PySide6.QtWidgets import QApplication
 
     from braid.theme import load_qss
@@ -172,15 +172,16 @@ def test_window_control_properties_and_qss_hover(win, qtbot):
         close._repolish()
         normal = close.palette().buttonText().color()
         assert normal == QColor("#6B6B69")
-        close.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
-        assert close.icon_color() == QColor("#FFFFFF")  # 来自 QSS :hover
+        QApplication.sendEvent(close, QEnterEvent(QPointF(5, 5), QPointF(5, 5), QPointF(5, 5)))
+        assert close.property("hovered") is True
+        assert close.palette().buttonText().color() == QColor("#FFFFFF")  # 来自 QSS :hover
         mn = c.buttons["min"]
-        mn.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
+        mn.set_hovered(True)
         assert mn.icon_color() == normal
         img = close.grab().toImage()
         assert img.pixelColor(2, 14) == QColor("#E5484D")  # QSS 画的 hover 底
         QApplication.sendEvent(close, QEvent(QEvent.Type.Leave))
-        close.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
-        assert close.icon_color() == normal
+        assert close.property("hovered") is False
+        assert close.palette().buttonText().color() == normal
     finally:
         QApplication.instance().setStyleSheet("")

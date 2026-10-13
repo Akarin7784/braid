@@ -3,14 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QEnterEvent, QIcon, QImage, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QStyle,
-    QStyleOptionToolButton,
-    QToolButton,
-    QWidget,
-)
+from PySide6.QtGui import QColor, QEnterEvent, QPainter, QPaintEvent, QPen
+from PySide6.QtWidgets import QHBoxLayout, QToolButton, QWidget
 
 BTN = 28
 ICON = 10
@@ -37,38 +31,26 @@ class ControlButton(QToolButton):
         return QSize(BTN, BTN)
 
     def _repolish(self) -> None:
-        # QSS 的 :hover 颜色只在 polish 时写进 palette，进出时重新 polish
+        # QSS 的 [hovered="true"] 颜色在 polish 时写进 palette
         st = self.style()
         st.unpolish(self)
         st.polish(self)
         self.update()
 
+    def set_hovered(self, on: bool) -> None:
+        self.setProperty("hovered", on)
+        self._repolish()
+
     def enterEvent(self, e: QEnterEvent) -> None:
         super().enterEvent(e)
-        self._repolish()
+        self.set_hovered(True)
 
     def leaveEvent(self, e: QEvent) -> None:
         super().leaveEvent(e)
-        self._repolish()
+        self.set_hovered(False)
 
     def icon_color(self) -> QColor:
-        """图标颜色：palette().buttonText()；QSS 的 :hover color 不会写进 palette，
-        所以悬停时让样式按当前状态画一个实心字形，取其像素颜色（仍完全由 QSS 决定）。"""
-        base = self.palette().buttonText().color()
-        if not (self.underMouse() or self.isDown()):
-            return base
-        opt = QStyleOptionToolButton()
-        self.initStyleOption(opt)
-        opt.state |= QStyle.StateFlag.State_MouseOver
-        opt.text, opt.icon = "\u2588", QIcon()
-        opt.toolButtonStyle = Qt.ToolButtonStyle.ToolButtonTextOnly
-        img = QImage(self.size(), QImage.Format.Format_ARGB32)
-        img.fill(Qt.GlobalColor.transparent)
-        p = QPainter(img)
-        self.style().drawComplexControl(QStyle.ComplexControl.CC_ToolButton, opt, p, self)
-        p.end()
-        c = img.pixelColor(img.width() // 2, img.height() // 2)
-        return QColor(c.red(), c.green(), c.blue()) if c.alpha() == 255 else base
+        return self.palette().buttonText().color()
 
     def paintEvent(self, e: QPaintEvent) -> None:
         super().paintEvent(e)  # QSS 画底色

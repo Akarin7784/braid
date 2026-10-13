@@ -26,19 +26,15 @@ _ACTIVE_FALLBACK = {False: "#E9E9E8", True: "#3A3A39"}
 
 
 def _load_active() -> dict[bool, str]:
-    """优先读 design/tokens.json 的 active token，读不到用默认值。"""
+    """读包内 braid/theme/tokens.json 的 active token，读不到用默认值。"""
     import json
-    from pathlib import Path
+    from importlib.resources import files
 
-    for base in Path(__file__).resolve().parents:
-        f = base / "design" / "tokens.json"
-        if f.is_file():
-            try:
-                t = json.loads(f.read_text(encoding="utf-8"))
-                return {False: t["light"]["active"], True: t["dark"]["active"]}
-            except (OSError, ValueError, KeyError):
-                break
-    return dict(_ACTIVE_FALLBACK)
+    try:
+        t = json.loads((files("braid.theme") / "tokens.json").read_text(encoding="utf-8"))
+        return {False: t["light"]["active"], True: t["dark"]["active"]}
+    except (OSError, ValueError, KeyError, ModuleNotFoundError):
+        return dict(_ACTIVE_FALLBACK)
 
 
 SELECTED_BG = _load_active()

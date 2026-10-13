@@ -2,6 +2,8 @@
 
 做法：同一条消息分别用"有内容"和"空白占位"各渲染一次，逐像素比较。
 有差异的像素就是文字，取其中与原底色对比度最高的那个，要求 >= 4.5:1（WCAG AA）。
+注意：只设 app 的 braidDark 属性和 QSS（与 app.py 一致），不调用 set_dark，
+确保 ChatView 自己跟随 app 主题。
 """
 
 import pytest
@@ -45,7 +47,6 @@ def _render(qtbot, dark: bool, role: str, text: str) -> QImage:
     app.setStyleSheet(load_qss("dark" if dark else "light"))
     win = MainWindow(MockBackend())
     qtbot.addWidget(win)
-    win.chat_view.set_dark(dark)
     win.resize(1200, 700)
     win.show()
     qtbot.waitExposed(win)

@@ -51,13 +51,6 @@ DEFAULT_COMMANDS = [
     SlashCommand("help", "查看可用命令"),
 ]
 PERMISSIONS = [("ask", "每次询问"), ("auto-edit", "自动编辑"), ("full", "完全自主")]
-REASONING_LABELS = {"low": "低", "medium": "中", "high": "高", "max": "最高"}
-REASONING_DESC = {
-    "low": "思考更少，回复更快",
-    "medium": "速度与质量兼顾",
-    "high": "思考更多，适合难题",
-    "max": "思考最充分，耗时最长",
-}
 
 
 class _Input(QTextEdit):
@@ -255,24 +248,25 @@ class Composer(QFrame):
         self._model_actions: dict[str, QAction] = {}
         self._level_actions: dict[tuple[str, str], QAction] = {}
         group = QActionGroup(menu)
-        providers: dict[str, list[ModelInfo]] = {}
+        groups: dict[str, list[ModelInfo]] = {}
         for m in models:
-            providers.setdefault(m.provider or "其他", []).append(m)
-        for provider, items in providers.items():
-            menu.addGroupHeader(provider)
+            groups.setdefault(m.group, []).append(m)
+        for group_name, items in groups.items():
+            if group_name:
+                menu.addGroupHeader(group_name)
             for m in items:
-                if m.reasoning_levels:
+                if m.efforts:
                     sub = menu.addMenu(m.name)
                     act = sub.menuAction()
-                    for lv in m.reasoning_levels:
-                        la = QAction(REASONING_LABELS.get(lv, lv), sub, checkable=True)
-                        ModelMenu.describe(la, REASONING_DESC.get(lv, ""))
+                    for eff in m.efforts:
+                        la = QAction(eff.label, sub, checkable=True)
+                        ModelMenu.describe(la, eff.description)
                         la.triggered.connect(
-                            lambda _=False, mid=m.id, lv=lv: self.set_selection(mid, lv)
+                            lambda _=False, mid=m.id, lv=eff.id: self.set_selection(mid, lv)
                         )
                         group.addAction(la)
                         sub.addAction(la)
-                        self._level_actions[(m.id, lv)] = la
+                        self._level_actions[(m.id, eff.id)] = la
                 else:
                     act = QAction(m.name, menu)
                     act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, ""))
@@ -300,7 +294,8 @@ class Composer(QFrame):
             a.setChecked(mid == m.id)  # 选中只靠打勾，不加粗、不加底色
         for (mid, l2), a in self._level_actions.items():
             a.setChecked(mid == m.id and l2 == lv)
-        self.model_chip.setText(m.name + (f" · {REASONING_LABELS.get(lv, lv)}" if lv else ""))
+        eff = m.effort(lv) if lv else None
+        self.model_chip.setText(m.name + (f" · {eff.label}" if eff else ""))
         self.selectionChanged.emit(self.model_id, self.reasoning)
 
     def set_key_bindings(self, bindings: dict[str, str]) -> None:

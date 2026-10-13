@@ -9,6 +9,7 @@ from braid.core.backend import (
     CONFIG_SECTIONS,
     AgentBackend,
     ConnectionResult,
+    EffortOption,
     Message,
     ModelInfo,
     Session,
@@ -135,6 +136,15 @@ def default_config() -> dict[str, dict[str, Any]]:
     }
 
 
+# 示例数据：真实后端按各自模型能力返回
+MOCK_EFFORTS: tuple[EffortOption, ...] = (
+    EffortOption("low", "低", "思考更少，回复更快"),
+    EffortOption("medium", "中", "速度与质量兼顾"),
+    EffortOption("high", "高", "思考更多，适合难题"),
+    EffortOption("max", "最高", "思考最充分，耗时最长"),
+)
+
+
 class MockBackend(AgentBackend):
     def __init__(self) -> None:
         self._config = default_config()
@@ -172,15 +182,22 @@ class MockBackend(AgentBackend):
             ModelInfo(
                 "mock-large",
                 "Mock Large",
-                "Mock AI",
-                ("low", "medium", "high", "max"),
-                "最强·适合复杂任务",
-                "高",
+                group="Mock AI",
+                tier="高",
+                description="最强·适合复杂任务",
+                efforts=MOCK_EFFORTS,
             ),
             ModelInfo(
-                "mock-fast", "Mock Fast", "Mock AI", ("low", "medium"), "快速·适合日常", "中"
+                "mock-fast",
+                "Mock Fast",
+                group="Mock AI",
+                tier="中",
+                description="快速·适合日常",
+                efforts=MOCK_EFFORTS[:2],
             ),
-            ModelInfo("local-7b", "Local 7B", "本地模型", (), "本机运行·离线可用", "低"),
+            ModelInfo(
+                "local-7b", "Local 7B", group="本地模型", tier="低", description="本机运行·离线可用"
+            ),
         ]
 
     def send(

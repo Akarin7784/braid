@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -295,7 +296,8 @@ class Composer(QFrame):
         self.add_attachments(files)
 
     def add_attachments(self, paths: list[str]) -> None:
-        for p in paths:
+        for raw in paths:
+            p = os.path.normpath(raw) if raw else raw
             if p and p not in self.attachments:
                 self.attachments.append(p)
                 chip = _chip(Path(p).name + "  \u2715")

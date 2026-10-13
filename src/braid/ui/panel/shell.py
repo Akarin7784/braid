@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QResizeEvent
+from typing import Any
+
+from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -11,6 +13,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSplitter,
+    QSplitterHandle,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -93,6 +97,48 @@ class ResizeGrip(QWidget):
         self._start = None
 
 
+class PanelTabRow(QWidget):
+    """标签行。提供与 QTabBar 相同的 ``count()`` / ``tabRect(i)``，供主窗口定位浮层按钮。"""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.buttons: list[QPushButton] = []
+
+    def count(self) -> int:
+        return len(self.buttons)
+
+    def tabRect(self, i: int) -> QRect:  # noqa: N802
+        return self.buttons[i].geometry()
+
+
+class _SeamlessHandle(QSplitterHandle):
+    """零宽、禁用的分割条：不画线也不可拖（右栏宽度由 ResizeGrip 调整）。"""
+
+    def __init__(self, o: Qt.Orientation, parent: QSplitter) -> None:
+        super().__init__(o, parent)
+        self.setEnabled(False)
+
+    def sizeHint(self) -> QSize:
+        return QSize(0, 0)
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        pass
+
+
+class PanelSplitter(QSplitter):
+    """主窗口三栏分割器：``seamless_index`` 处（默认中栏|右栏之间）的分割条宽 0、不画线。"""
+
+    def __init__(self, *args: Any, seamless_index: int = 2, **kw: Any) -> None:
+        self.seamless_index = seamless_index
+        super().__init__(*args, **kw)
+
+    def createHandle(self) -> QSplitterHandle:
+        # createHandle 在新控件插入前调用，此时 count() 即新控件的下标
+        if self.count() == self.seamless_index:
+            return _SeamlessHandle(self.orientation(), self)
+        return super().createHandle()
+
+
 class RightPanel(QFrame):
     """右栏：标签行 + 堆叠页面。宽度 420，可拖 320–720。"""
 
@@ -115,14 +161,14 @@ class RightPanel(QFrame):
         self.setObjectName("RightPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(panel_qss(mode))
-        self.setMinimumWidth(MIN_WIDTH)
+        # 不设最小宽度：主窗口收起/展开动画需要把宽度压到 0；拖动范围由 ResizeGrip 钳制
         self.setMaximumWidth(MAX_WIDTH)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 0, 18, 18)
         root.setSpacing(12)
 
-        row = QWidget()
+        self.tab_row = row = PanelTabRow(self)
         row.setObjectName("PanelTabRow")
         row.setFixedHeight(TAB_ROW_H)
         rl = QHBoxLayout(row)
@@ -138,8 +184,18 @@ class RightPanel(QFrame):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             self.tab_group.addButton(b, i)
             self.tabs.append(b)
+            row.buttons.append(b)
             rl.addWidget(b)
         rl.addStretch(1)
+        # 标签行最右侧的公开占位（窗口控制按钮）；为空时隐藏，不占宽度
+        self.trailing = QWidget()
+        self.trailing.setObjectName("PanelTrailing")
+        tl = QHBoxLayout(self.trailing)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
+        self.trailing.hide()
+        rl.addWidget(self.trailing, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._trailing_w: QWidget | None = None
         root.addWidget(row)
 
         self.stack = QStackedWidget()
@@ -173,6 +229,26 @@ class RightPanel(QFrame):
         eff.setColor(QColor(0, 0, 0, 0x14))
         self.setGraphicsEffect(eff)
 
+    def trailing_widget(self) -> QWidget | None:
+        return self._trailing_w
+
+    def set_trailing_widget(self, w: QWidget | None) -> None:
+        """在标签行最右侧放一个控件（如窗口控制按钮），按其 sizeHint 垂直居中；None 移除。"""
+        lay = self.trailing.layout()
+        assert lay is not None
+        old = self._trailing_w
+        if old is w:
+            return
+        if old is not None:
+            lay.removeWidget(old)
+            old.setParent(None)
+        self._trailing_w = w
+        if w is not None:
+            lay.addWidget(w)
+            lay.setAlignment(w, Qt.AlignmentFlag.AlignVCenter)
+            w.show()
+        self.trailing.setVisible(w is not None)
+
     def set_page(self, index: int, page: QWidget) -> None:
         old = self.stack.widget(index)
         self.stack.insertWidget(index, page)
@@ -203,8 +279,18 @@ class RightPanel(QFrame):
             self.currentChanged.emit(index)
 
     def set_panel_width(self, w: int) -> int:
+        """设置右栏宽度（钳制到 320–720）。在 QSplitter 中时调整分割尺寸，中栏吸收差值。"""
         w = clamp_width(w)
-        self.setFixedWidth(w)
+        split = self.parentWidget()
+        if isinstance(split, QSplitter) and (i := split.indexOf(self)) >= 0:
+            sizes = split.sizes()
+            delta = w - sizes[i]
+            j = i - 1 if i > 0 else i + 1
+            sizes[i] = w
+            sizes[j] = max(1, sizes[j] - delta)
+            split.setSizes(sizes)
+        else:
+            self.resize(w, self.height())
         self.widthChanged.emit(w)
         return w
 

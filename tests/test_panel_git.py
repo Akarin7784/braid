@@ -77,7 +77,8 @@ def test_stage_toggle_hover(qtbot):
     row = next(r for r in p.rows if r.fc.path == "src/old_auth.py")
     assert row.toggle.isHidden()
     QApplication.sendEvent(row, QEvent(QEvent.Type.HoverEnter))
-    assert not row.toggle.isHidden() and row.toggle.text() == "+"
+    assert not row.toggle.isHidden() and row.toggle.property("sign") == "+"
+    assert row.toggle.text() == ""
     qtbot.mouseClick(row.toggle, Qt.MouseButton.LeftButton)
     assert [f.path for f in src.status().staged] == ["src/pages/forgot.py", "src/old_auth.py"]
     assert p.commit_btn.text() == "提交 2 个文件"

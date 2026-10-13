@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -233,6 +233,29 @@ class SyncButton(QPushButton):
             self._place_spinner()
 
 
+class StageToggle(QPushButton):
+    """行尾暂存(+)/取消暂存(−)按钮：自绘 1.5px 线性符号，text2 色（paint 时取）。"""
+
+    def __init__(self, plus: bool) -> None:
+        super().__init__()
+        self.plus = plus
+        self.setProperty("role", "stageToggle")
+        self.setProperty("sign", "+" if plus else "-")
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        super().paintEvent(e)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(palette(is_dark())["text2"]), 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        c = QRectF(self.rect()).center()
+        p.drawLine(QPointF(c.x() - 4, c.y()), QPointF(c.x() + 4, c.y()))
+        if self.plus:
+            p.drawLine(QPointF(c.x(), c.y() - 4), QPointF(c.x(), c.y() + 4))
+        p.end()
+
+
 class FileRow(QFrame):
     """文件行：路径（等宽 12 text2）+ hover 时的 +/− + 状态字母。"""
 
@@ -255,8 +278,7 @@ class FileRow(QFrame):
         self.path.setProperty("role", "path")
         self.path.setFont(mono_font(12))
         lay.addWidget(self.path, 1)
-        self.toggle = QPushButton("−" if staged else "+")
-        self.toggle.setProperty("role", "stageToggle")
+        self.toggle = StageToggle(plus=not staged)
         self.toggle.setFixedSize(20, 20)
         self.toggle.setToolTip("取消暂存" if staged else "暂存")
         self.toggle.hide()

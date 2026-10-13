@@ -104,3 +104,71 @@ def test_panel_follows_app_dark(qtbot):
         assert tokens("dark")["pn_a"] in p.styleSheet()
     finally:
         app.setProperty("braidDark", False)
+
+
+def _main_window(qtbot):
+    from braid.backends.mock import MockBackend
+    from braid.ui.main_window import MainWindow
+
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(1280, 800)
+    w.show()
+    QApplication.processEvents()
+    return w
+
+
+def test_no_divider_between_chat_and_panel(qtbot):
+    w = _main_window(qtbot)
+    split = w.centralWidget()
+    h = split.handle(split.indexOf(w.panel))
+    assert h.width() == 0 or not h.isVisible()
+    assert not h.isEnabled()
+    chat = split.widget(split.indexOf(w.panel) - 1)
+    assert w.panel.geometry().left() == chat.geometry().right() + 1  # 紧贴，无缝
+    assert split.handle(1).width() > 0  # 左栏分割条不受影响
+
+
+def test_main_window_grip_drag_clamped(qtbot):
+    w = _main_window(qtbot)
+    w.resize(1800, 800)
+    QApplication.processEvents()
+    p = w.panel
+    right = p.geometry().right()
+    _drag(p.grip, -100)
+    QApplication.processEvents()
+    assert p.width() == 520 and p.geometry().right() == right
+    _drag(p.grip, -2000)
+    QApplication.processEvents()
+    assert p.width() == MAX_WIDTH
+    _drag(p.grip, 3000)
+    QApplication.processEvents()
+    assert p.width() == MIN_WIDTH
+
+
+def test_trailing_widget(qtbot):
+    from PySide6.QtCore import QSize
+    from PySide6.QtWidgets import QWidget
+
+    class Box(QWidget):
+        def sizeHint(self):
+            return QSize(90, 28)
+
+    p = RightPanel()
+    qtbot.addWidget(p)
+    p.show()
+    row = p.tabs[0].parentWidget()
+    assert p.trailing.isHidden() and p.trailing_widget() is None
+    stretch_before = row.layout().itemAt(len(p.tabs)).geometry().width()
+    box = Box()
+    p.set_trailing_widget(box)
+    QApplication.processEvents()
+    assert p.trailing_widget() is box and box.isVisible()
+    g = box.geometry().translated(p.trailing.pos())
+    assert g.right() == row.contentsRect().right()  # 最右侧
+    assert box.height() == 28 and abs(g.center().y() - row.height() / 2) <= 1  # 垂直居中
+    assert g.left() > p.tabs[-1].geometry().right()
+    p.set_trailing_widget(None)
+    QApplication.processEvents()
+    assert p.trailing.isHidden() and box.parent() is None
+    assert row.layout().itemAt(len(p.tabs)).geometry().width() == stretch_before

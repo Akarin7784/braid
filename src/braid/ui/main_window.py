@@ -190,6 +190,8 @@ class MainWindow(QMainWindow):
             self.settings_page.setVisible(on)
         self.chat_view.setVisible(not on)
         self.composer.setVisible(not on)
+        # 设置页的最小宽度比对话区大，切换后重算窗口下限，避免中栏被裁切
+        self._update_min_width()
         if on:
             self.title.setText("设置")
         elif (cur := getattr(self, "_current", None)) is not None:

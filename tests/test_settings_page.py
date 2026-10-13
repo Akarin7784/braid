@@ -1,3 +1,6 @@
+import pytest
+from PySide6.QtCore import Qt
+
 from braid.core import secrets
 from braid.core.providers import Provider, ProviderStore
 from braid.ui.settings_page import SAVED_TEXT, SettingsPage, mask_key
@@ -72,3 +75,50 @@ def test_eye_icon_follows_state(qtbot, tmp_path):
     assert key.eye.property("eyeState") == "closed" and not key.eye.icon().isNull()
     key.toggle_reveal()
     assert key.eye.property("eyeState") == "open" and not key.eye.icon().isNull()
+
+
+@pytest.mark.parametrize("width", [1280, 900, 640])
+def test_settings_no_horizontal_scrollbar_or_size_grip(
+    qtbot, tmp_path, monkeypatch, width: int
+) -> None:
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QScrollBar, QSizeGrip
+
+    from braid.backends.mock import MockBackend
+    from braid.ui.main_window import MainWindow
+
+    monkeypatch.setenv("BRAID_CONFIG_DIR", str(tmp_path))
+    ProviderStore(tmp_path / "providers.json").upsert(
+        Provider(name="OpenAI", base_url="https://api.example.com/v1/chat/completions")
+    )
+    from braid.theme import load_qss
+
+    w = MainWindow(MockBackend())
+    w.setStyleSheet(load_qss("light"))  # 带上真实内边距，否则量不出裁切
+    qtbot.addWidget(w)
+    w.resize(width, 800)
+    w.show()
+    w.show_settings(True)
+    qtbot.wait(50)
+    page = w.findChild(SettingsPage)
+    assert page is not None
+    assert page.scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    bars = [
+        b
+        for b in page.findChildren(QScrollBar)
+        if b.orientation() == Qt.Orientation.Horizontal and b.isVisible()
+    ]
+    assert bars == []
+    assert [g for g in w.findChildren(QSizeGrip) if g.isVisible()] == []
+    card = page.models.cards()[0]
+    vp = page.scroll_area.viewport()
+    for wid in (card, card.base_url, card.key.edit, card.key.eye):
+        assert wid.isVisible()
+        left = wid.mapTo(vp, QPoint(0, 0)).x()
+        assert left >= 0
+        assert left + wid.width() <= vp.width(), (type(wid).__name__, width)
+    # 输入框随宽度伸缩但不被压成 0
+    assert card.key.edit.width() > 40
+    # 中栏不能比自身下限窄（否则整列被分割器裁掉）
+    center = w.chat_view.parentWidget()
+    assert center.width() >= center.minimumSizeHint().width()

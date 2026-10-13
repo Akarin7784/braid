@@ -48,6 +48,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QListView,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -570,12 +571,19 @@ class ChatDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.cache = _DocCache()
         self.hover_row = -1
-        self.dark = False
+        self.dark_override: bool | None = None  # None 表示跟随 app 的 braidDark
         self.hover_pos: QPoint | None = None  # 视图坐标，用于代码块悬停“复制”
         self.shadow_opacity = 0.55  # 用户气泡阴影保持很淡
         # (row, 代码块下标) -> 计时器；存在即显示“已复制 ✓”
         self.copied: dict[tuple[int, int], QTimer] = {}
         self.copiedChanged_cb: list[Callable[[int], None]] = []  # 视图注册刷新回调
+
+    @property
+    def dark(self) -> bool:
+        if self.dark_override is not None:
+            return self.dark_override
+        app = QApplication.instance()
+        return bool(app.property("braidDark")) if app else False
 
     def mark_copied(self, row: int, block: int) -> None:
         key = (row, block)
@@ -815,9 +823,16 @@ class ChatView(QListView):
         if self._at_bottom:
             QTimer.singleShot(0, self.scrollToBottom)
 
-    def set_dark(self, dark: bool) -> None:
-        self.delegate.dark = dark
+    def set_dark(self, dark: bool | None) -> None:
+        """手动覆盖深浅色；传 None 恢复跟随 app 的 braidDark。"""
+        self.delegate.dark_override = dark
         self.doItemsLayout()
+
+    def changeEvent(self, e: QEvent) -> None:
+        # 运行时切主题会换样式表/调色板，重新排版以取新的 braidDark
+        if e.type() in (QEvent.Type.StyleChange, QEvent.Type.PaletteChange):
+            self.doItemsLayout()
+        super().changeEvent(e)
 
     def mouseMoveEvent(self, e: QMouseEvent) -> None:
         self.delegate.hover_pos = e.position().toPoint()

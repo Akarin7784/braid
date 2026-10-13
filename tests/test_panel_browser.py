@@ -3,8 +3,8 @@ import sys
 
 import pytest
 from PySide6.QtCore import QUrl, Signal
-from PySide6.QtGui import QColor, QImage
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from braid.backends.mock_browser import MockBrowserController
 from braid.theme.palette import tokens
@@ -62,6 +62,13 @@ class FakeView(QWidget):
 
     def stop(self):
         self.calls.append("stop")
+
+
+def _render(w, img):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QRegion
+
+    w.render(img, QPoint(), QRegion(), QWidget.RenderFlag.DrawChildren)
 
 
 def _page(qtbot, view=True, ctrl=None):
@@ -164,16 +171,102 @@ def test_click_highlight_fades_600ms(qtbot):
     img = QImage(h.size(), QImage.Format.Format_ARGB32)
     img.fill(0)
     h.render(img)
-    edge = QColor(img.pixel(int(fr.left()) + 40, int(fr.top())))
+    edge = img.pixelColor(int(fr.left()) + 40, int(fr.top()))
     assert edge.red() > 150 and edge.blue() < 120  # brand 描边
     qtbot.waitUntil(lambda: not h.isVisible(), timeout=2000)
 
 
-def test_click_point_only(qtbot):
+def test_click_point_dot_and_ripple(qtbot):
     ctrl = MockBrowserController()
     p = _page(qtbot, ctrl=ctrl)
     ctrl.agent_click.emit(100, 100)
-    assert p.highlight.target.center().x() in (99, 100) and p.highlight.label == "点击"
+    h = p.highlight
+    assert h.point_mode and h.isVisible() and h.label == ""
+    assert (bmod.DOT_D, bmod.RIPPLE_FROM, bmod.RIPPLE_TO) == (10, 10, 36)
+    assert h.anim.duration() == 600
+    h.anim.stop()
+    h.opacity = 1.0
+    assert h.ripple_diameter() == 10
+    h.opacity = 0.5
+    assert h.ripple_diameter() == 23
+    h.opacity = 0.0
+    assert h.ripple_diameter() == 36
+    h.opacity = 1.0
+    img = QImage(h.size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    _render(h, img)
+    c = img.pixelColor(100, 100)
+    assert c.name().upper() == tokens(False)["brand"]  # 圆点中心为 brand
+    assert img.pixelColor(100 + 12, 100).alpha() == 0  # 初始无方框/波纹仅 10px
+    h.flash(h.target, "x")  # 有元素框时恢复方框模式
+    assert not h.point_mode
+
+
+def test_corner_mask(qtbot):
+    from PySide6.QtCore import Qt
+
+    p = _page(qtbot)
+    m = p.corners
+    assert m is not None
+    assert m.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    assert m.geometry() == p.view.geometry()
+    p.resize(520, 600)
+    QApplication.processEvents()
+    assert m.geometry() == p.view.geometry()
+    img = QImage(m.size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    _render(m, img)
+    corner = img.pixelColor(0, 0)
+    assert corner.alpha() == 255
+    assert corner.name().upper() in (tokens(False)["pn_a"], tokens(False)["pn_b"])
+    assert img.pixelColor(m.width() // 2, m.height() // 2).alpha() == 0
+    assert img.pixelColor(bmod.CORNER_R, bmod.CORNER_R).alpha() == 0
+
+
+def test_corner_mask_absent_when_unavailable(qtbot):
+    assert _page(qtbot, view=False).corners is None
+
+
+def test_nav_icons_fallback_glyphs(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr(bmod, "nav_icon_path", lambda n, d: tmp_path / f"nav_{n}.png")
+    p = _page(qtbot)
+    assert p.back_btn.text() == "←" and p.back_btn.icon().isNull()
+    assert p.external_btn.text() == "↗" and p.reload_btn.text() == "↻"
+    p.set_loading(True)
+    assert p.reload_btn.text() == "✕"
+
+
+def test_nav_icons_loaded(qtbot, monkeypatch, tmp_path):
+    for n in ("back", "forward", "reload", "stop", "external"):
+        pm = QPixmap(40, 40)
+        pm.fill(QColor("#123456"))
+        pm.save(str(tmp_path / f"nav_{n}_light.png"))
+    monkeypatch.setattr(
+        bmod, "nav_icon_path", lambda n, d: tmp_path / f"nav_{n}_{'dark' if d else 'light'}.png"
+    )
+    p = _page(qtbot)
+    for b in (p.back_btn, p.forward_btn, p.reload_btn, p.external_btn):
+        assert b.text() == "" and not b.icon().isNull()
+        assert b.iconSize().width() == bmod.NAV_ICON_PT == 20
+    icon = bmod.load_nav_icon("back", False)
+    assert icon is not None
+    assert icon.availableSizes()[0].width() == 40  # 40px 源图，按 iconSize 20pt 显示
+    p.set_loading(True)
+    assert p.reload_btn.property("navIcon") == "stop" and p.reload_btn.text() == ""
+    p.set_loading(False)
+    assert p.reload_btn.property("navIcon") == "reload"
+
+
+def test_disabled_nav_opacity(qtbot):
+    p = _page(qtbot)
+    for b in (p.back_btn, p.forward_btn):
+        assert not b.isEnabled() and not b.isHidden()
+        assert b.graphicsEffect().opacity() == pytest.approx(0.35)
+    p.view.h.back = True
+    p.view.urlChanged.emit(QUrl("http://a"))
+    assert p.back_btn.graphicsEffect().opacity() == 1.0
+    assert p.forward_btn.graphicsEffect().opacity() == pytest.approx(0.35)
+    assert p.external_btn.graphicsEffect().opacity() == 1.0
 
 
 @pytest.mark.webengine

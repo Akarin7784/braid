@@ -8,14 +8,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from typing import Any
 
 from PySide6.QtCore import (
     Property,
     QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
     QPropertyAnimation,
     QRect,
     QRectF,
+    QSize,
     Qt,
     QUrl,
     Signal,
@@ -25,15 +32,19 @@ from PySide6.QtGui import (
     QDesktopServices,
     QFont,
     QHideEvent,
+    QIcon,
+    QLinearGradient,
     QPainter,
     QPainterPath,
     QPaintEvent,
     QPen,
+    QPixmap,
     QResizeEvent,
     QShowEvent,
 )
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -48,11 +59,35 @@ from braid.theme.palette import tokens as palette
 from braid.ui.panel.shell import card_shadow
 from braid.ui.panel.tokens import tokens
 
+
+def nav_icon_path(name: str, dark: bool) -> Traversable:
+    return files("braid.assets") / "icons" / f"nav_{name}_{'dark' if dark else 'light'}.png"
+
+
+def load_nav_icon(name: str, dark: bool) -> QIcon | None:
+    """读 assets/icons/nav_<name>_<mode>.png（40px，按 20pt 显示）；缺失返回 None。"""
+    try:
+        f = nav_icon_path(name, dark)
+        if not f.is_file():
+            return None
+        pm = QPixmap()
+        if not pm.loadFromData(f.read_bytes()) or pm.isNull():
+            return None
+    except (FileNotFoundError, OSError, ModuleNotFoundError):
+        return None
+    pm.setDevicePixelRatio(pm.width() / NAV_ICON_PT)
+    return QIcon(pm)
+
+
 ROW_H = 28
 HIGHLIGHT_FADE_MS = 600
 BREATH_MS = 1200
 STATUS_INSET = 16
-DEFAULT_TARGET = 28  # 只有坐标时的高亮框边长
+DOT_D, RIPPLE_FROM, RIPPLE_TO = 10, 10, 36  # 只有坐标时：圆点直径、波纹起止直径
+CORNER_R = 14  # 网页卡片圆角（反圆角浮层）
+NAV_ICON_PT = 20  # 40px 图标按 20pt 显示
+NAV_DISABLED_OPACITY = 0.35
+NAV_GLYPHS = {"back": "←", "forward": "→", "reload": "↻", "stop": "✕", "external": "↗"}
 UNAVAILABLE_TEXT = "浏览器组件不可用（未安装 QtWebEngine）\n可点击右上角 ↗ 在系统浏览器中打开"
 
 WebFactory = Callable[[], QWidget | None]
@@ -181,6 +216,7 @@ class ClickHighlight(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.target = QRect()
         self.label = ""
+        self.point_mode = False
         self._opacity = 0.0
         self.anim = QPropertyAnimation(self, b"opacity", self)
         self.anim.setDuration(HIGHLIGHT_FADE_MS)
@@ -199,7 +235,16 @@ class ClickHighlight(QWidget):
 
     opacity = Property(float, _get, _set)
 
-    def flash(self, target: QRect, label: str) -> None:
+    def flash_point(self, x: int, y: int) -> None:
+        """只有坐标：brand 圆点 + 波纹 10→36px 同时淡出，共 600ms。"""
+        self.flash(QRect(x, y, 0, 0), "", point=True)
+
+    def ripple_diameter(self) -> float:
+        prog = 1.0 - self._opacity
+        return RIPPLE_FROM + (RIPPLE_TO - RIPPLE_FROM) * prog
+
+    def flash(self, target: QRect, label: str, point: bool = False) -> None:
+        self.point_mode = point
         self.target, self.label = QRect(target), label
         if parent := self.parentWidget():
             self.setGeometry(parent.rect())
@@ -213,11 +258,26 @@ class ClickHighlight(QWidget):
         return QRectF(self.target).adjusted(-self.PAD, -self.PAD, self.PAD, self.PAD)
 
     def paintEvent(self, e: QPaintEvent) -> None:
-        if self._opacity <= 0 or self.target.isNull():
+        if self._opacity <= 0:
             return
         t = palette(is_dark())
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.point_mode:
+            c = QPointF(self.target.topLeft())
+            p.setOpacity(self._opacity)
+            p.setPen(QPen(QColor(t["brand"]), 1.5))
+            p.setBrush(_c(t["sel"]))
+            rad = self.ripple_diameter() / 2
+            p.drawEllipse(c, rad, rad)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(t["brand"]))
+            p.drawEllipse(c, DOT_D / 2, DOT_D / 2)
+            p.end()
+            return
+        if self.target.isNull():
+            p.end()
+            return
         p.setOpacity(self._opacity)
         r = self.frame_rect()
         halo = QPainterPath()
@@ -234,6 +294,58 @@ class ClickHighlight(QWidget):
             p.setFont(f)
             p.setPen(QColor(t["brand"]))
             p.drawText(QRectF(r.left(), r.bottom() + self.HALO, 400, 16), self.label)
+        p.end()
+
+
+class CornerMask(QWidget):
+    """盖在网页上的透明浮层：四角各画 14px 反圆角，用面板底色填充，鼠标穿透。
+    不用 setMask（会锯齿且影响 WebEngine 合成）。尺寸随目标控件变化。"""
+
+    def __init__(self, target: QWidget, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.target = target
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        target.installEventFilter(self)
+        self.sync()
+
+    def sync(self) -> None:
+        self.setGeometry(self.target.geometry())
+        self.raise_()
+
+    def eventFilter(self, o: QObject, e: QEvent) -> bool:
+        if o is self.target and e.type() in (QEvent.Type.Resize, QEvent.Type.Move):
+            self.sync()
+        return False
+
+    def fill_brush(self) -> QLinearGradient:
+        """面板底色 pn_a→pn_b 横向渐变，按所在右栏的坐标映射。"""
+        t = palette(is_dark())
+        panel = self.parentWidget()
+        while panel is not None and panel.objectName() != "RightPanel":
+            panel = panel.parentWidget()
+        if panel is None:
+            x0, x1 = 0.0, float(max(1, self.width()))
+        else:
+            x0 = float(self.mapFrom(panel, QPoint(0, 0)).x())
+            x1 = x0 + panel.width()
+        g = QLinearGradient(x0, 0, x1, 0)
+        g.setColorAt(0, QColor(t["pn_a"]))
+        g.setColorAt(1, QColor(t["pn_b"]))
+        return g
+
+    def corner_path(self) -> QPainterPath:
+        r = float(CORNER_R)
+        full = QPainterPath()
+        full.addRect(QRectF(self.rect()))
+        rounded = QPainterPath()
+        rounded.addRoundedRect(QRectF(self.rect()), r, r)
+        return full.subtracted(rounded)
+
+    def paintEvent(self, e: QPaintEvent) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.fillPath(self.corner_path(), self.fill_brush())
         p.end()
 
 
@@ -256,9 +368,10 @@ class BrowserPage(QWidget):
 
         bar = QHBoxLayout()
         bar.setSpacing(4)
-        self.back_btn = self._nav("←", "后退")
-        self.forward_btn = self._nav("→", "前进")
-        self.reload_btn = self._nav("↻", "刷新")
+        self.dark = theme == "dark"
+        self.back_btn = self._nav("back", "后退")
+        self.forward_btn = self._nav("forward", "前进")
+        self.reload_btn = self._nav("reload", "刷新")
         for b in (self.back_btn, self.forward_btn, self.reload_btn):
             bar.addWidget(b)
         self.url_edit = QLineEdit()
@@ -267,7 +380,7 @@ class BrowserPage(QWidget):
         self.url_edit.setPlaceholderText("输入网址")
         self.url_edit.returnPressed.connect(lambda: self.load(self.url_edit.text()))
         bar.addWidget(self.url_edit, 1)
-        self.external_btn = self._nav("↗", "在系统浏览器打开")
+        self.external_btn = self._nav("external", "在系统浏览器打开")
         self.external_btn.clicked.connect(self.open_external)
         bar.addWidget(self.external_btn)
         lay.addLayout(bar)
@@ -282,6 +395,7 @@ class BrowserPage(QWidget):
         self.progress.setFixedHeight(2)
         self.progress.hide()
         cl.addWidget(self.progress)
+        self.corners: CornerMask | None = None
         self.view: Any = web_factory()
         if self.view is None:
             self.web_available = False
@@ -293,6 +407,7 @@ class BrowserPage(QWidget):
             self.web_available = True
             cl.addWidget(self.view, 1)
             self._wire_view(self.view)
+            self.corners = CornerMask(self.view, self.card)
         card_shadow(self.card)
         lay.addWidget(self.card, 1)
 
@@ -309,12 +424,36 @@ class BrowserPage(QWidget):
             controller.agent_click_target.connect(self.show_click_target)
 
     # —— 地址栏 ——
-    def _nav(self, glyph: str, tip: str) -> QPushButton:
-        b = QPushButton(glyph)
+    def _nav(self, name: str, tip: str) -> QPushButton:
+        b = QPushButton()
         b.setProperty("role", "navButton")
         b.setToolTip(tip)
         b.setFixedSize(ROW_H, ROW_H)
+        b.setIconSize(QSize(NAV_ICON_PT, NAV_ICON_PT))
+        self._set_nav_icon(b, name)
+        # 不可用时不隐藏，整体 0.35 不透明度（图标与字符兜底一致）
+        eff = QGraphicsOpacityEffect(b)
+        eff.setOpacity(1.0)
+        b.setGraphicsEffect(eff)
+        b.installEventFilter(self)
         return b
+
+    def _set_nav_icon(self, b: QPushButton, name: str) -> None:
+        b.setProperty("navIcon", name)
+        icon = load_nav_icon(name, self.dark)
+        if icon is None:
+            b.setIcon(QIcon())
+            b.setText(NAV_GLYPHS[name])
+        else:
+            b.setText("")
+            b.setIcon(icon)
+
+    def eventFilter(self, o: QObject, e: QEvent) -> bool:
+        if e.type() == QEvent.Type.EnabledChange and isinstance(o, QPushButton):
+            eff = o.graphicsEffect()
+            if isinstance(eff, QGraphicsOpacityEffect):
+                eff.setOpacity(1.0 if o.isEnabled() else NAV_DISABLED_OPACITY)
+        return super().eventFilter(o, e)
 
     def _wire_view(self, v: Any) -> None:
         # 只用 QWebEngineView 的公开 API，不在顶层引用其类型
@@ -357,7 +496,7 @@ class BrowserPage(QWidget):
 
     def set_loading(self, on: bool) -> None:
         self.loading = on
-        self.reload_btn.setText("✕" if on else "↻")
+        self._set_nav_icon(self.reload_btn, "stop" if on else "reload")
         self.reload_btn.setToolTip("停止" if on else "刷新")
         self.progress.setVisible(on)
         if on:
@@ -394,8 +533,9 @@ class BrowserPage(QWidget):
         )
 
     def show_click(self, x: int, y: int) -> None:
-        d = DEFAULT_TARGET
-        self.show_click_target(x - d // 2, y - d // 2, d, d, "")
+        y0 = self.progress.height() if self.progress.isVisible() else 0
+        self.highlight.flash_point(x, y + y0)
+        self.status.raise_()
 
     def show_click_target(self, x: int, y: int, w: int, h: int, selector: str) -> None:
         y0 = self.progress.height() if self.progress.isVisible() else 0

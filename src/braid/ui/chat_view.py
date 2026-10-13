@@ -283,21 +283,13 @@ def _lexer(lang: str) -> Any:
 
 # 代码高亮配色：tokens.json 没有专门的语法色，浅色深色都从现有调色板取，
 # 不用 Pygments 自带主题（浅色 default 是纯绿 / 纯蓝，深色 github-dark 也不跟 tokens）。
-# 按 Pygments token 类型的前缀匹配，越靠前越具体；没匹配到的保持正文色。
+# 只用四种色：关键字 brand、字符串 success、数字等字面量 warning、注释 text3；
+# 函数 / 类 / 内置 / 装饰器 / 运算符 / 标点等其余一律保持正文色。按前缀匹配，越靠前越具体。
 SYNTAX_TOKENS: tuple[tuple[str, str], ...] = (
     ("Comment", "text3"),
     ("Keyword", "brand"),
-    ("Name.Builtin", "warning"),
-    ("Name.Function", "warning"),
-    ("Name.Class", "warning"),
-    ("Name.Decorator", "warning"),
     ("Literal.String", "success"),
-    ("Literal.Number", "danger"),
-    ("Literal", "danger"),
-    ("Operator.Word", "brand"),
-    ("Operator", "text2"),
-    ("Punctuation", "text2"),
-    ("Error", "danger"),
+    ("Literal", "warning"),
 )
 
 

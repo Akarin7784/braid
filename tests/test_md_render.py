@@ -246,11 +246,16 @@ def _code_colors(doc):
 def test_syntax_colors_come_from_tokens(qtbot):
     src = "```python\nimport braid\n# c\ndef f(x):\n    return 'a' + 1\n```\n"
     for dark in (False, True):
-        palette = {str(v).upper() for v in chat_view.THEME[dark].values() if str(v).startswith("#")}
+        t = chat_view.THEME[dark]
+        allowed = {t[k].upper() for k in ("brand", "success", "warning", "text3", "text")}
         colors = _code_colors(_DocCache().get(src, 500, dark))
-        assert colors, dark
-        assert colors <= palette, (dark, colors - palette)
-        assert chat_view.THEME[dark]["brand"].upper() in colors  # import / def 关键字
+        assert colors <= allowed, (dark, colors - allowed)
+        for k in ("brand", "success", "warning", "text3"):  # 关键字 / 字符串 / 数字 / 注释
+            assert t[k].upper() in colors, (dark, k)
+    from pygments.token import Name, Operator, Punctuation
+
+    for tt in (Name.Function, Name.Class, Name.Builtin, Name.Decorator, Operator, Punctuation):
+        assert chat_view.syntax_color(tt, False) is None
 
 
 def test_body_text_regular_weight_both_themes(qtbot):

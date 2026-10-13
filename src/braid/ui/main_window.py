@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QRectF, Qt, QVariantAnimation
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QRectF,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+)
 from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -153,8 +162,14 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        if self._sessions:
-            sidebar.select(self._sessions[0].id)
+        # 首个会话的渲染（Markdown 排版 + Pygments 上色，约 130ms）推到首帧之后；
+        # 计时器归窗口所有，窗口先销毁则不会触发。
+        QTimer.singleShot(0, self, self.open_initial_session)
+
+    def open_initial_session(self) -> None:
+        """选中第一个会话；用户已经选过（或已打开）则什么也不做。"""
+        if self._sessions and getattr(self, "_current", None) is None:
+            self.sidebar.select(self._sessions[0].id)
 
     def _open(self, row: int) -> None:
         self.sidebar.select(self._sessions[row].id)

@@ -50,6 +50,8 @@ def _render(qtbot, dark: bool, role: str, text: str) -> QImage:
     win.resize(1200, 700)
     win.show()
     qtbot.waitExposed(win)
+    # 首个会话在首帧后才打开，先等它打开，免得覆盖下面塞进去的消息
+    qtbot.waitUntil(lambda: getattr(win, "_current", None) is not None)
     view = win.chat_view
     view.chat_model.set_messages([(role, text)])
     qtbot.wait(50)

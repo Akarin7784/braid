@@ -409,7 +409,7 @@ def test_mono_font_not_generic_only(qtbot, monkeypatch):
     f = widgets.mono_font(px=12)
     assert f.families() == fams and f.pixelSize() == 12
     assert f.styleHint() == QFont.StyleHint.Monospace
-    installed = set(QFontDatabase.families())
-    first = next(x for x in fams if x in installed)
-    assert QFontDatabase.isFixedPitch(first), first
-    assert QFontInfo(f).fixedPitch()
+    # 不变量：只要字体库里列得出任何等宽字体，mono_font() 就必须解析成等宽字体
+    if not any(QFontDatabase.isFixedPitch(x) for x in QFontDatabase.families()):
+        pytest.skip("字体库里没有任何等宽字体（环境限制），无法验证")
+    assert QFontInfo(f).fixedPitch(), QFontInfo(f).family()

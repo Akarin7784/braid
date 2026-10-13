@@ -569,15 +569,20 @@ PLATFORM_MONO = (
 
 
 def mono_families() -> list[str]:
-    """等宽字体族的回退顺序：tokens.font.mono 的等宽项 → 系统 FixedFont → 平台等宽 → CJK 回退。"""
+    """等宽字体族的回退顺序。
+
+    tokens.font.mono 的等宽项 → 系统 FixedFont → 平台等宽 → 任意已装等宽 → CJK 回退。
+    """
     raw = (files("braid.theme") / "tokens.json").read_text(encoding="utf-8")
     token_list: list[str] = list(json.loads(raw).get("font", {}).get("mono", []))
     db = set(QFontDatabase.families())
     head = [f for f in token_list if f in db and QFontDatabase.isFixedPitch(f)]
     sys_fixed = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont).family()
     rest = [f for f in token_list if f not in head]
+    # 兜底：上面都没装时，用字体库里任意一款等宽字体，排在比例 CJK 回退之前
+    any_fixed = next((f for f in sorted(db) if QFontDatabase.isFixedPitch(f)), "")
     out: list[str] = []
-    for f in [*head, sys_fixed, *PLATFORM_MONO, *rest]:
+    for f in [*head, sys_fixed, *PLATFORM_MONO, any_fixed, *rest]:
         if f and f not in out:
             out.append(f)
     return out

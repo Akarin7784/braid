@@ -37,6 +37,12 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -v
       - run: pyinstaller --noconfirm packaging/braid.spec
+      - name: 检查包内资源（tokens、QSS、图标）
+        shell: bash
+        run: |
+          for f in tokens.json app_light.qss app_dark.qss; do
+            find dist -name "$f" | grep -q . || { echo "缺少 $f"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: braid-${{ runner.os }}

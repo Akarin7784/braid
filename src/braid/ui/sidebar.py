@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import AgentBackend, Session
+from braid.core.session_store import SessionStore
+from braid.theme.palette import qcolor, tokens
 
 SID = Qt.ItemDataRole.UserRole
 HEADER = Qt.ItemDataRole.UserRole + 1
@@ -41,36 +43,17 @@ ROW_GAP = 2
 HEADER_TOP, HEADER_TOP_FIRST, HEADER_BOTTOM, HEADER_TEXT_H = 20, 8, 8, 14
 ARROW = 12
 
-_FALLBACK = {
-    False: {"row_sel": "#EDEDEC", "text": "#1F1F1E", "text2": "#6B6B69", "text3": "#9E9E9B"},
-    True: {"row_sel": "#2B2B2A", "text": "#ECECEA", "text2": "#A3A3A0", "text3": "#73736F"},
-}
+
+def _c(name: str, dark: bool) -> QColor:
+    return qcolor(name, dark)
 
 
-def _load_tokens() -> dict[bool, dict[str, str]]:
-    """读包内 tokens.json；缺的键（如尚未合入的 row_sel）用默认值。"""
-    import json
-    from importlib.resources import files
-
-    out = {k: dict(v) for k, v in _FALLBACK.items()}
-    try:
-        t = json.loads((files("braid.theme") / "tokens.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError, ModuleNotFoundError):
-        return out
-    for dark, name in ((False, "light"), (True, "dark")):
-        for k in out[dark]:
-            if k in t.get(name, {}):
-                out[dark][k] = t[name][k]
-    return out
-
-
-TOKENS = _load_tokens()
-SELECTED_BG = {d: TOKENS[d]["row_sel"] for d in (False, True)}
+SELECTED_BG = {d: tokens(d)["row_sel"] for d in (False, True)}
 
 
 def _hover(dark: bool) -> QColor:
-    c = QColor(SELECTED_BG[dark])
-    c.setAlphaF(0.6)
+    c = _c("row_sel", dark)
+    c.setAlphaF(c.alphaF() * 0.6)
     return c
 
 
@@ -86,7 +69,6 @@ class SessionDelegate(QStyledItemDelegate):
         self, p: QPainter, opt: QStyleOptionViewItem, idx: QModelIndex | QPersistentModelIndex
     ) -> None:
         dark = _dark()
-        t = TOKENS[dark]
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         if idx.data(HEADER):
@@ -94,7 +76,7 @@ class SessionDelegate(QStyledItemDelegate):
             band = QRectF(
                 opt.rect.x() + 8, opt.rect.y() + top, opt.rect.width() - 16, HEADER_TEXT_H
             )
-            c = QColor(t["text3"])
+            c = _c("text3", dark)
             pen = QPen(c, 1.2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -120,7 +102,7 @@ class SessionDelegate(QStyledItemDelegate):
         sel = bool(opt.state & QStyle.StateFlag.State_Selected)
         if sel:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(SELECTED_BG[dark]))
+            p.setBrush(_c("row_sel", dark))
             p.drawRoundedRect(r, 8, 8)
         elif opt.state & QStyle.StateFlag.State_MouseOver:
             p.setPen(Qt.PenStyle.NoPen)
@@ -130,7 +112,7 @@ class SessionDelegate(QStyledItemDelegate):
         f.setWeight(QFont.Weight.Normal)
         f.setBold(False)
         p.setFont(f)
-        p.setPen(QColor(t["text"] if sel else t["text2"]))
+        p.setPen(_c("text" if sel else "text2", dark))
         text = p.fontMetrics().elidedText(
             idx.data() or "", Qt.TextElideMode.ElideRight, int(r.width()) - 20
         )
@@ -146,12 +128,29 @@ class Sidebar(QFrame):
     sessionSelected = Signal(object)  # Session
     entryTriggered = Signal(str)  # projects / artifacts / schedules
 
-    def __init__(self, backend: AgentBackend, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        backend: AgentBackend,
+        parent: QWidget | None = None,
+        store: SessionStore | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("Sidebar")
         self.backend = backend
+        self.store = store
         self.sessions: list[Session] = list(backend.list_sessions())
         self.pinned: set[str] = set()
+        if store is not None:
+            known = {r.id: r for r in store.list_sessions()}
+            for sess in self.sessions:
+                r = known.get(sess.id)
+                if r is None:
+                    store.upsert(sess.id, sess.title, project_id=sess.project_id)
+                else:
+                    if r.pinned:
+                        self.pinned.add(sess.id)
+                    if r.project_id is not None:
+                        sess.project_id = r.project_id
         self._current: str | None = None
         self._rebuilding = False
         self.collapsed: set[str] = set()  # 折叠的组 key
@@ -200,6 +199,8 @@ class Sidebar(QFrame):
     def new_session(self) -> Session:
         s = self.backend.create_session()
         self.sessions.insert(0, s)
+        if self.store is not None:
+            self.store.upsert(s.id, s.title, project_id=s.project_id)
         self.search.clear()
         self.rebuild()
         self.select(s.id)
@@ -209,6 +210,8 @@ class Sidebar(QFrame):
         s = self.session(sid)
         if s and title.strip():
             s.title = title.strip()
+            if self.store is not None:
+                self.store.upsert(s.id, s.title)
         self.rebuild()
 
     def delete_session(self, sid: str) -> None:
@@ -218,6 +221,8 @@ class Sidebar(QFrame):
         idx = self.sessions.index(s)
         self.sessions.remove(s)
         self.pinned.discard(sid)
+        if self.store is not None:
+            self.store.delete_session(sid)
         delete = getattr(self.backend, "delete_session", None)
         if callable(delete):
             delete(sid)
@@ -230,6 +235,8 @@ class Sidebar(QFrame):
 
     def toggle_pin(self, sid: str) -> None:
         self.pinned.symmetric_difference_update({sid})
+        if self.store is not None:
+            self.store.set_pinned(sid, sid in self.pinned)
         self.rebuild()
 
     def select(self, sid: str) -> None:
@@ -257,6 +264,14 @@ class Sidebar(QFrame):
         self.rebuild()
 
     def _grouped(self, vis: list[Session]) -> list[tuple[str, list[Session]]]:
+        if self.store is not None:
+            by_id = {s.id: s for s in vis}
+            out: list[tuple[str, list[Session]]] = []
+            for key, recs in self.store.grouped():
+                items = [by_id[r.id] for r in recs if r.id in by_id]
+                if items:
+                    out.append((key or "", items))
+            return out
         order: list[str] = []
         buckets: dict[str, list[Session]] = {}
         for s in vis:

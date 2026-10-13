@@ -247,3 +247,20 @@ def test_title_bar_single_center_line(qtbot) -> None:
             assert abs(top + w.controls.height() / 2 - 22) <= 0.5
     for b in (w.sidebar_toggle, w.panel_toggle):
         assert (b.width(), b.height()) == (28, 28)
+
+
+def test_sidebar_persists_pin_and_delete(qtbot, tmp_path):
+    from braid.backends.mock import MockBackend
+    from braid.core.session_store import SessionStore
+    from braid.ui.sidebar import Sidebar
+
+    path = tmp_path / "s.json"
+    sb = Sidebar(MockBackend(), store=SessionStore(path))
+    qtbot.addWidget(sb)
+    sid = sb.sessions[-1].id
+    sb.toggle_pin(sid)
+    sb2 = Sidebar(MockBackend(), store=SessionStore(path))
+    qtbot.addWidget(sb2)
+    assert sid in sb2.pinned
+    groups = SessionStore(path).grouped()
+    assert sum(len(r) for _, r in groups) == len(sb2.sessions)

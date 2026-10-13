@@ -2,7 +2,6 @@ name: Bench
 on:
   push:
     branches: [main]
-  pull_request:
 jobs:
   bench:
     strategy:

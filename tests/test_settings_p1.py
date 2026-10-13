@@ -306,13 +306,18 @@ def test_every_page_fits_800(qtbot, tmp_path, monkeypatch, theme):
     sp = w.settings_page
     try:
         assert len(sp.models.cards()) == 2
-        for key, _ in NAV:
-            sp.show_section(key)
-            qtbot.wait(20)
-            sc = sp.scrolls[key]
-            assert sc.verticalScrollBar().maximum() == 0, key
-            assert sc.overlay_bar.isHidden(), key
-            assert sc.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        # #49：进设置页自动收起右栏；再手动打开右栏（中栏最窄）也要放得下
+        for panel_open in (False, True):
+            if panel_open:
+                w.set_panel_open(True, animate=False)
+            assert w.panel_open() == panel_open
+            for key, _ in NAV:
+                sp.show_section(key)
+                qtbot.wait(20)
+                sc = sp.scrolls[key]
+                assert sc.verticalScrollBar().maximum() == 0, (key, panel_open)
+                assert sc.overlay_bar.isHidden(), key
+                assert sc.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
     finally:
         app.setProperty("braidDark", False)
 
@@ -427,3 +432,33 @@ def test_row_labels_regular_weight(qtbot, tmp_path, theme):
 
     t = page.models.header.title.font()
     assert t.weight() == title_weight(t)
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_descriptions_use_text2(qtbot, tmp_path, theme):
+    """页头副标题与卡片组标题这类说明文字一律 text2。"""
+    from braid.theme import load_qss
+    from braid.theme.palette import qcolor
+
+    dark = theme == "dark"
+    app = QApplication.instance()
+    app.setProperty("braidDark", dark)
+    try:
+        page, _ = _settings(qtbot, tmp_path, 1)
+        page.setStyleSheet(load_qss(theme))
+        page.show()
+        qtbot.waitExposed(page)
+        want = qcolor("text2", dark).name()
+        labels = []
+        for key in ("models", "permissions", "general"):
+            sub = page.pages[key].header.subtitle
+            assert sub.text()
+            labels.append(sub)
+            labels += [c.title for c in page.pages[key].findChildren(SettingCard) if c.title]
+        assert any("确认" in lab.text() for lab in labels)
+        assert any("bash" in lab.text() for lab in labels)
+        for lab in labels:
+            lab.ensurePolished()
+            assert lab.palette().color(lab.foregroundRole()).name() == want, lab.text()
+    finally:
+        app.setProperty("braidDark", False)

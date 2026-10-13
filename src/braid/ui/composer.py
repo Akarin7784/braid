@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from braid.core.backend import ModelInfo
 from braid.core.settings import settings
-from braid.theme.menu import RoundedMenu
+from braid.theme.menu import ChipButton, RoundedMenu
 
 
 @dataclass(frozen=True)
@@ -176,10 +176,8 @@ class Composer(QFrame):
         self.attach_btn.setToolTip("添加附件")
         self.attach_btn.clicked.connect(self._pick_files)
         bar.addWidget(self.attach_btn)
-        self.model_chip = QToolButton()
+        self.model_chip = ChipButton()
         self.model_chip.setObjectName("ModelChip")
-        self.model_chip.setProperty("role", "modelChip")
-        self.model_chip.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.model_chip.setToolTip("模型与推理强度（Ctrl+Shift+I）")
         self.model_menu = self._build_model_menu(models)
         self.model_chip.setMenu(self.model_menu)

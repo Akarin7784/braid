@@ -1,5 +1,12 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   PYTHONWARNDEFAULTENCODING: "1"
 jobs:
@@ -8,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
       - run: pip install -e ".[dev]"
       - run: ruff check . && ruff format --check .
       - run: mypy
@@ -39,7 +46,47 @@ jobs:
           assert not miss, f"wheel 缺少: {sorted(miss)}"
           print("wheel 资源齐全")
           PY
-  test-and-package:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.p.outputs.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - id: p
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # main 上、带 full-ci 标签、或改了平台布局相关路径时才跑三平台，否则只跑 Ubuntu
+          full=0
+          if [ "$EVENT" != pull_request ] || [[ " $LABELS " == *" full-ci "* ]]; then full=1
+          elif git diff --name-only "$BASE" HEAD | grep -qE 'main_window|panel|theme/|packaging/|pyproject.toml|\.github/'; then full=1; fi
+          if [ $full = 1 ]; then echo 'os=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
+          else echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"; fi
+  test:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.plan.outputs.os) }}
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  package:
+    # PyInstaller 打包只在合进 main 之后跑
+    if: github.event_name == 'push'
     needs: lint
     strategy:
       fail-fast: false
@@ -51,11 +98,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libdbus-1-3
       - run: pip install -e ".[dev]"
-      - run: pytest -v
       - run: pyinstaller --noconfirm packaging/braid.spec
       - name: 检查包内资源（tokens、QSS、图标）
         shell: bash
@@ -80,19 +126,19 @@ jobs:
           path: dist/
 
   ui-xvfb:
-    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
       - run: sudo apt-get update && sudo apt-get install -y xvfb libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libdbus-1-3 fonts-noto-cjk fonts-noto-cjk-extra && fc-list :lang=zh family style | sort
       - run: pip install -e ".[dev]"
       - name: 在 xcb 上跑界面测试
         env: {QT_QPA_PLATFORM: xcb}
         run: |
-          # 连跑 5 轮找偶发失败，任何一轮失败都算失败
-          for i in 1 2 3 4 5; do
+          # main 上连跑 5 轮找偶发失败，PR 上只跑 1 轮
+          n=1; [ "${{ github.event_name }}" = push ] && n=5
+          for i in $(seq $n); do
             echo "== 第 $i 轮 =="
             xvfb-run -a -s "-screen 0 1600x1000x24" pytest -q -p no:cacheprovider --junitxml=junit-$i.xml || exit 1
           done
@@ -108,12 +154,11 @@ jobs:
           path: shots/
 
   webengine:
-    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
       - run: sudo apt-get update && sudo apt-get install -y xvfb libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libdbus-1-3 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2t64 fonts-noto-cjk
       - run: pip install -e ".[dev]"
       - name: 浏览器相关测试

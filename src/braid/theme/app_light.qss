@@ -1,6 +1,6 @@
 /* 由 build_qss.py 从 tokens.json 生成；勿手改 app_light.qss / app_dark.qss */
 * { font-size: 13px; color: #1F1F1E; outline: none; }
-QWidget { background: transparent; border: none; selection-background-color: #C9643233; }
+QWidget { background: transparent; border: none; selection-background-color: rgba(201, 100, 50, 51); }
 QMainWindow, #ChatArea { background: #FDFDFD; }
 #Sidebar { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #F4F4F3, stop:0.8 #F4F4F3, stop:1 #F9F9F8); }
 #SidePanel { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #FBFBFA, stop:0.2 #F6F6F5, stop:1 #F6F6F5); }
@@ -116,3 +116,16 @@ QToolButton[role="modelChip"]::menu-indicator { image: none; width: 0px; }
 QToolButton[role="windowControl"] { background: transparent; border: none; border-radius: 8px; color: #6B6B69; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0; }
 QToolButton[role="windowControl"]:hover, QToolButton[role="windowControl"][hovered="true"] { background: #ECECEB; }
 QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowControl"][kind="close"][hovered="true"] { background: #E5484D; color: #FFFFFF; }
+
+/* 设置页：模型与服务 */
+#settingsNav { background: transparent; border: none; padding: 8px; }
+#settingsNav::item { color: #6B6B69; padding: 0 12px; min-height: 32px; border-radius: 8px; }
+#settingsNav::item:selected { background: #E9E9E8; color: #1F1F1E; }
+#providerName { font-size: 14px; font-weight: 600; }
+QLineEdit#settingsField { background: #F0F0EF; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
+QLineEdit#settingsField:focus { background: #FFFFFF; border: 1px solid rgba(201, 100, 50, 51); }
+#keyringWarning { background: rgba(178, 106, 0, 26); color: #B26A00; border-radius: 8px; padding: 8px 12px; }
+QToolButton#keyEye, QToolButton#providerMore { background: transparent; color: #6B6B69; padding: 0; min-width: 28px; min-height: 28px; }
+QToolButton#keyEye:hover, QToolButton#providerMore:hover { background: #ECECEB; }
+QMenu[danger="true"]::item { color: #C0392B; }
+QMenu[danger="true"]::item:selected { background: rgba(192, 57, 43, 31); }

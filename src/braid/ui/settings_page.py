@@ -164,8 +164,8 @@ class ProviderCard(QWidget):
 
     def build_menu(self) -> RoundedMenu:
         menu = RoundedMenu(self)
+        menu.setProperty("danger", True)  # 只有删除一项，整菜单用 danger 色
         act = menu.addAction("删除服务商")
-        act.setObjectName("dangerAction")
         act.triggered.connect(self.confirm_remove)
         return menu
 

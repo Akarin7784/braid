@@ -116,3 +116,16 @@ QToolButton[role="modelChip"]::menu-indicator { image: none; width: 0px; }
 QToolButton[role="windowControl"] { background: transparent; border: none; border-radius: 8px; color: ${wc_fg}; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0; }
 QToolButton[role="windowControl"]:hover, QToolButton[role="windowControl"][hovered="true"] { background: ${wc_hover}; }
 QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowControl"][kind="close"][hovered="true"] { background: ${wc_close_hover}; color: ${wc_close_fg}; }
+
+/* 设置页：模型与服务 */
+#settingsNav { background: transparent; border: none; padding: 8px; }
+#settingsNav::item { color: ${text2}; padding: 0 12px; min-height: 32px; border-radius: 8px; }
+#settingsNav::item:selected { background: ${active}; color: ${text}; }
+#providerName { font-size: 14px; font-weight: 600; }
+QLineEdit#settingsField { background: ${control}; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
+QLineEdit#settingsField:focus { background: ${surface}; border: 1px solid ${sel}; }
+#keyringWarning { background: ${warning_bg}; color: ${warning}; border-radius: 8px; padding: 8px 12px; }
+QToolButton#keyEye, QToolButton#providerMore { background: transparent; color: ${text2}; padding: 0; min-width: 28px; min-height: 28px; }
+QToolButton#keyEye:hover, QToolButton#providerMore:hover { background: ${hover}; }
+QMenu[danger="true"]::item { color: ${danger}; }
+QMenu[danger="true"]::item:selected { background: ${danger_hover}; }

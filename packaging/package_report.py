@@ -45,7 +45,9 @@ def archive(os_name: str) -> Path:
         stage = Path("dmg-stage")
         shutil.rmtree(stage, ignore_errors=True)
         stage.mkdir()
-        subprocess.run(["ditto", str(root), str(stage / "Braid.app")], check=True)
+        subprocess.run(
+            ["ditto", str(root), str(stage / "Braid.app")], check=True, stdout=sys.stderr
+        )
         os.symlink("/Applications", stage / "Applications")
         subprocess.run(
             [
@@ -61,6 +63,7 @@ def archive(os_name: str) -> Path:
                 str(dst),
             ],
             check=True,
+            stdout=sys.stderr,  # 只让产物路径进 stdout
         )
         shutil.rmtree(stage)
     else:

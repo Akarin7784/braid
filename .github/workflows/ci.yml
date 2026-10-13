@@ -110,6 +110,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
+      PYTHONUTF8: "1"  # Windows 控制台是 cp1252，中文输出会 UnicodeEncodeError
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
@@ -163,7 +164,7 @@ jobs:
         id: pack
         shell: bash
         run: |
-          f=$(python packaging/package_report.py archive "${{ runner.os }}")
+          f=$(python packaging/package_report.py archive "${{ runner.os }}" | tail -n 1)
           echo "file=$f" >> "$GITHUB_OUTPUT"
           # 体积与重复文件写进 size-<OS>.txt，并并入 selfcheck-<OS>.txt 的 package 字段；超线只告警
           python packaging/package_report.py report "${{ runner.os }}" "$f"

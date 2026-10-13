@@ -83,7 +83,7 @@ def _drop(dest):
 
 def _slim(toc):
     kept = [e for e in toc if not _drop(e[0])]
-    print(f"[slim] 去掉 {len(toc) - len(kept)} / {len(toc)} 项")
+    print(f"[slim] dropped {len(toc) - len(kept)} / {len(toc)} entries")
     return kept
 
 
@@ -102,7 +102,7 @@ def _check_needed(binaries):
             if lib not in have:
                 (bad_plugins.add(d) if "plugins" in Path(d).parts else miss.add(f"{d} -> {lib}"))
     for d in sorted(bad_plugins):
-        print(f"[slim] 去掉插件 {d}（依赖已排除的模块）")
+        print(f"[slim] dropped plugin {d} (depends on excluded module)")
     assert not miss, "瘦身后缺少 Qt 依赖:\n" + "\n".join(sorted(miss))
     return [e for e in binaries if e[0] not in bad_plugins]
 

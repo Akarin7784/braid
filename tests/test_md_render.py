@@ -226,3 +226,48 @@ def test_highlight_does_not_bleed_into_next_list_item(qtbot):
     assert b.textList() is not None
     fg = b.charFormat().foreground()
     assert fg.style() == 0 or fg.color() == doc.begin().charFormat().foreground().color()
+
+
+def _code_colors(doc):
+    out = set()
+    b = doc.begin()
+    while b.isValid():
+        if b.blockFormat().hasProperty(QTextFormat.Property.BlockCodeFence):
+            it = b.begin()
+            while not it.atEnd():
+                cf = it.fragment().charFormat()
+                if cf.hasProperty(QTextFormat.Property.ForegroundBrush):
+                    out.add(cf.foreground().color().name().upper())
+                it += 1
+        b = b.next()
+    return out
+
+
+def test_syntax_colors_come_from_tokens(qtbot):
+    src = "```python\nimport braid\n# c\ndef f(x):\n    return 'a' + 1\n```\n"
+    for dark in (False, True):
+        palette = {str(v).upper() for v in chat_view.THEME[dark].values() if str(v).startswith("#")}
+        colors = _code_colors(_DocCache().get(src, 500, dark))
+        assert colors, dark
+        assert colors <= palette, (dark, colors - palette)
+        assert chat_view.THEME[dark]["brand"].upper() in colors  # import / def 关键字
+
+
+def test_body_text_regular_weight_both_themes(qtbot):
+    from PySide6.QtGui import QFont
+
+    for dark in (False, True):
+        doc = _DocCache().get(NESTED, 500, dark)
+        doc.documentLayout().documentSize()
+        b = doc.begin()
+        while b.isValid():
+            if not b.blockFormat().hasProperty(QTextFormat.Property.BlockCodeFence):
+                it = b.begin()
+                while not it.atEnd():
+                    cf = it.fragment().charFormat()
+                    assert cf.fontWeight() == QFont.Weight.Normal, (dark, b.text())
+                    assert cf.font().weight() == QFont.Weight.Normal
+                    it += 1
+                for run in b.layout().glyphRuns():
+                    assert run.rawFont().weight() <= QFont.Weight.Normal, (dark, b.text())
+            b = b.next()

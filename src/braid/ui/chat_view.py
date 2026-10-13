@@ -281,13 +281,42 @@ def _lexer(lang: str) -> Any:
         return TextLexer()
 
 
+# 代码高亮配色：tokens.json 没有专门的语法色，浅色深色都从现有调色板取，
+# 不用 Pygments 自带主题（浅色 default 是纯绿 / 纯蓝，深色 github-dark 也不跟 tokens）。
+# 按 Pygments token 类型的前缀匹配，越靠前越具体；没匹配到的保持正文色。
+SYNTAX_TOKENS: tuple[tuple[str, str], ...] = (
+    ("Comment", "text3"),
+    ("Keyword", "brand"),
+    ("Name.Builtin", "warning"),
+    ("Name.Function", "warning"),
+    ("Name.Class", "warning"),
+    ("Name.Decorator", "warning"),
+    ("Literal.String", "success"),
+    ("Literal.Number", "danger"),
+    ("Literal", "danger"),
+    ("Operator.Word", "brand"),
+    ("Operator", "text2"),
+    ("Punctuation", "text2"),
+    ("Error", "danger"),
+)
+
+
+def syntax_color(ttype: Any, dark: bool) -> str | None:
+    """Pygments token 类型 → tokens.json 里的颜色；None 表示用正文色。"""
+    name = ".".join(ttype) if isinstance(ttype, tuple) else str(ttype)
+    name = name.removeprefix("Token.")
+    for prefix, key in SYNTAX_TOKENS:
+        if name == prefix or name.startswith(prefix + "."):
+            return str(THEME[dark][key])
+    return None
+
+
 def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
     """给 Markdown 渲染出的代码块按 Pygments token 上色（没装 Pygments 时跳过）。"""
     try:
-        from pygments.styles import get_style_by_name
+        import pygments  # noqa: F401
     except ImportError:
         return
-    style = get_style_by_name("github-dark" if dark else "default")
     block = doc.begin()
     while block.isValid():
         lang = block.blockFormat().property(QTextFormat.Property.BlockCodeLanguage)
@@ -309,11 +338,11 @@ def highlight_code_blocks(doc: QTextDocument, dark: bool) -> None:
         # 只在这段代码内上色：Pygments 末尾会补一个换行，越界会染到下一段（如列表序号）
         limit = start.position() + len("\n".join(lines))
         for ttype, value in lexer.get_tokens("\n".join(lines)):
-            st = style.style_for_token(ttype)
+            color = syntax_color(ttype, dark)
             end = min(pos + len(value), limit)
-            if st["color"] and end > pos:
+            if color and end > pos:
                 fmt = QTextCharFormat()
-                fmt.setForeground(QColor("#" + st["color"]))
+                fmt.setForeground(QColor(color))
                 cur.setPosition(pos)
                 cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
                 cur.mergeCharFormat(fmt)

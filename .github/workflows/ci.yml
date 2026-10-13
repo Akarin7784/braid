@@ -102,8 +102,7 @@ jobs:
           if-no-files-found: ignore
 
   package:
-    # PyInstaller 打包只在合进 main 之后跑
-    if: github.event_name == 'push'
+    # PR 上也跑：打包产物自检是发版门槛，必须合入前就验证
     needs: lint
     strategy:
       fail-fast: false
@@ -145,6 +144,27 @@ jobs:
             done
           done
           [ "$miss" -eq 0 ]
+      - if: runner.os == 'Linux'
+        run: sudo apt-get install -y xvfb libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2t64
+      - name: 打包产物自检（keyring 后端 + WebEngine）
+        shell: bash
+        env: {QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu"}
+        run: |
+          out="$PWD/selfcheck-${{ runner.os }}.txt"
+          case "${{ runner.os }}" in
+            Linux)   QT_QPA_PLATFORM=xcb xvfb-run -a -s "-screen 0 1280x800x24" dist/braid/braid --self-check "$out" ;;
+            Windows) QT_QPA_PLATFORM=windows dist/braid/braid.exe --self-check "$out" ;;
+            macOS)   QT_QPA_PLATFORM=cocoa dist/Braid.app/Contents/MacOS/braid --self-check "$out" ;;
+          esac
+          rc=$?
+          cat "$out" || echo "自检没有写出结果文件"
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selfcheck-${{ runner.os }}.txt
+          path: selfcheck-${{ runner.os }}.txt
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: braid-${{ runner.os }}

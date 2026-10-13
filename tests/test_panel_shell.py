@@ -93,3 +93,14 @@ def test_browser_lazy(qtbot):
     qtbot.mouseClick(p.tabs[0], Qt.MouseButton.LeftButton)
     assert p.browser_loaded and "braid.ui.panel.browser" in _s.modules
     assert p.stack.currentIndex() == 0
+
+
+def test_panel_follows_app_dark(qtbot):
+    app = QApplication.instance()
+    app.setProperty("braidDark", True)
+    try:
+        p = RightPanel()
+        qtbot.addWidget(p)
+        assert tokens("dark")["pn_a"] in p.styleSheet()
+    finally:
+        app.setProperty("braidDark", False)

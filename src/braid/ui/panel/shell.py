@@ -102,12 +102,16 @@ class RightPanel(QFrame):
     def __init__(
         self,
         parent: QWidget | None = None,
-        mode: str = "light",
+        mode: str | None = None,
         artifact_source: ArtifactSource | None = None,
         git_source: GitSource | None = None,
         browser_controller: BrowserController | None = None,
     ) -> None:
         super().__init__(parent)
+        if mode is None:  # 未指定时跟随应用主题（app 属性 braidDark）
+            from braid.theme.menu import is_dark
+
+            mode = "dark" if is_dark() else "light"
         self.setObjectName("RightPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(panel_qss(mode))

@@ -415,6 +415,8 @@ class BrowserPage(QWidget):
         self.status.takeoverClicked.connect(self.takeover)
         self.loading = False
         self._update_nav()
+        for b in (self.back_btn, self.forward_btn, self.reload_btn, self.external_btn):
+            self._apply_nav_opacity(b)
 
         if controller is not None:
             controller.navigate_requested.connect(self.load)
@@ -431,9 +433,7 @@ class BrowserPage(QWidget):
         b.setIconSize(QSize(NAV_ICON_PT, NAV_ICON_PT))
         self._set_nav_icon(b, name)
         # 不可用时不隐藏，整体 0.35 不透明度（图标与字符兜底一致）
-        eff = QGraphicsOpacityEffect(b)
-        eff.setOpacity(1.0)
-        b.setGraphicsEffect(eff)
+        # 只在不可用时挂 opacity effect：常驻 effect 嵌在右栏阴影 effect 里会导致按钮不绘制
         b.installEventFilter(self)
         return b
 
@@ -447,11 +447,24 @@ class BrowserPage(QWidget):
             b.setText("")
             b.setIcon(icon)
 
+    @staticmethod
+    def _apply_nav_opacity(b: QPushButton) -> None:
+        if b.isEnabled():
+            if b.graphicsEffect() is not None:
+                b.setGraphicsEffect(None)  # type: ignore[arg-type]
+        elif not isinstance(b.graphicsEffect(), QGraphicsOpacityEffect):
+            eff = QGraphicsOpacityEffect(b)
+            eff.setOpacity(NAV_DISABLED_OPACITY)
+            b.setGraphicsEffect(eff)
+
+    @staticmethod
+    def nav_opacity(b: QPushButton) -> float:
+        eff = b.graphicsEffect()
+        return eff.opacity() if isinstance(eff, QGraphicsOpacityEffect) else 1.0
+
     def eventFilter(self, o: QObject, e: QEvent) -> bool:
         if e.type() == QEvent.Type.EnabledChange and isinstance(o, QPushButton):
-            eff = o.graphicsEffect()
-            if isinstance(eff, QGraphicsOpacityEffect):
-                eff.setOpacity(1.0 if o.isEnabled() else NAV_DISABLED_OPACITY)
+            self._apply_nav_opacity(o)
         return super().eventFilter(o, e)
 
     def _wire_view(self, v: Any) -> None:

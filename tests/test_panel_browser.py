@@ -271,12 +271,12 @@ def test_disabled_nav_opacity(qtbot):
     p = _page(qtbot)
     for b in (p.back_btn, p.forward_btn):
         assert not b.isEnabled() and not b.isHidden()
-        assert b.graphicsEffect().opacity() == pytest.approx(0.35)
+        assert BrowserPage.nav_opacity(b) == pytest.approx(0.35)
     p.view.h.back = True
     p.view.urlChanged.emit(QUrl("http://a"))
-    assert p.back_btn.graphicsEffect().opacity() == 1.0
-    assert p.forward_btn.graphicsEffect().opacity() == pytest.approx(0.35)
-    assert p.external_btn.graphicsEffect().opacity() == 1.0
+    assert BrowserPage.nav_opacity(p.back_btn) == 1.0
+    assert BrowserPage.nav_opacity(p.forward_btn) == pytest.approx(0.35)
+    assert BrowserPage.nav_opacity(p.external_btn) == 1.0
 
 
 @pytest.mark.webengine

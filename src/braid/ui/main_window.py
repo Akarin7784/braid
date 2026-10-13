@@ -203,6 +203,20 @@ class MainWindow(QMainWindow):
     def _command(self, name: str) -> None:
         if name == "clear":
             self.chat_view.chat_model.set_messages([])
+        elif name == "new":
+            self.sidebar.new_session()
+        elif name == "branch":
+            self.branch_current()
+
+    def branch_current(self) -> Session | None:
+        """从当前会话的最后一条消息开分支，归到同一个项目。"""
+        cur = getattr(self, "_current", None)
+        if cur is None:
+            return None
+        b = self.backend.branch_session(cur.id, len(cur.messages) - 1)
+        if b.project_id is None:
+            b.project_id = cur.project_id
+        return self.sidebar.add_session(b)
 
     def _toggle_max(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()

@@ -312,3 +312,18 @@ def test_panel_collapse_animates_below_min(win, qtbot):
     qtbot.waitUntil(lambda: not win.panel.isVisible(), timeout=2000)
     assert any(0 < w < MIN_WIDTH for w in seen)
     assert win.panel.minimumWidth() == MIN_WIDTH
+
+
+def test_slash_new_and_branch(win, qtbot):
+    sb = win.sidebar
+    n = len(sb.sessions)
+    win._command("new")
+    assert len(sb.sessions) == n + 1 and win._current is sb.sessions[0]
+    src = next(s for s in sb.sessions if s.messages)
+    sb.select(src.id)
+    assert win._current is src
+    win._command("branch")
+    b = sb.sessions[0]
+    assert win._current is b and b.parent_id == src.id
+    assert [m.text for m in b.messages] == [m.text for m in src.messages]
+    assert b.project_id == src.project_id

@@ -31,7 +31,7 @@ class MockBackend(AgentBackend):
             ("调研 PySide6 打包", "Braid"),
         ]:
             s = self.create_session(t)
-            s.project = proj
+            s.project_id = proj
             s.messages += [
                 Message("user", f"帮我{t}"),
                 Message("assistant", DEMO_REPLY),

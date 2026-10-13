@@ -260,7 +260,7 @@ class Sidebar(QFrame):
         order: list[str] = []
         buckets: dict[str, list[Session]] = {}
         for s in vis:
-            key = s.project or ""
+            key = s.project_id or ""
             if key not in buckets:
                 buckets[key] = []
                 if key:

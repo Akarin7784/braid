@@ -21,7 +21,7 @@ class Message:
 class Session:
     id: str
     title: str
-    project: str | None = None
+    project_id: str | None = None
     parent_id: str | None = None  # 分支来源
     messages: list[Message] = field(default_factory=list)
     # 会话自己的模型与推理强度；None 表示使用设置里的默认值

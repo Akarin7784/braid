@@ -25,6 +25,7 @@ from braid.ui.settings.widgets import CARD_RADIUS, SettingCard, SettingRow, Togg
 SECTION = "mcp"
 ADD_H = 64
 ERROR_TEXT = "连接失败"
+NAME_W = 120  # 名称列定宽，命令/URL 列在所有行同一 x 起
 McpKind = Literal["local", "remote"]
 McpStatus = Literal["connected", "error", "disconnected"]
 STATUS_TOKEN: dict[str, str] = {
@@ -127,6 +128,10 @@ class McpRow(SettingRow):
         self.cfg = cfg
         self.target, self.switch = tail.target, tail.switch
         self.dot = StatusDot(cfg.status, self)
+        self.label.setFixedWidth(NAME_W)
+        self.label.setToolTip(cfg.name)
+        fm = self.label.fontMetrics()
+        self.label.setText(fm.elidedText(cfg.name, Qt.TextElideMode.ElideRight, NAME_W))
         lay = cast(QHBoxLayout, self.layout())
         lay.insertWidget(0, self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
         lay.setSpacing(10)

@@ -152,3 +152,22 @@ def test_no_scrollbar_panel_collapsed_and_open(qtbot, theme):
                 assert vp.contains(r), (wid, r, vp, panel_open)
     finally:
         app.setProperty("braidDark", False)
+
+
+def test_name_column_fixed(qtbot):
+    from braid.ui.settings.mcp import NAME_W
+
+    be = MockBackend()
+    servers = be.get_config("mcp")["servers"]
+    servers["a-very-long-mcp-server-name-xyz"] = servers.pop("sqlite")
+    be.set_config("mcp", {"servers": servers})
+    page = _page(qtbot, be)
+    rows = page.rows()
+    assert len(rows) == 4
+    xs = {r.target.mapTo(page, QPoint(0, 0)).x() for r in rows}
+    assert len(xs) == 1
+    for r in rows:
+        assert r.label.width() == NAME_W
+        assert r.label.toolTip() == r.cfg.name
+    long = next(r for r in rows if r.cfg.name.startswith("a-very"))
+    assert long.label.text().endswith("…") and long.label.text() != long.cfg.name

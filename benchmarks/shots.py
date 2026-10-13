@@ -8,7 +8,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QEventLoop, QPoint, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -21,8 +21,10 @@ OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
 
 
 def settle(app: QApplication, ms: int = 300) -> None:
-    QTimer.singleShot(ms, app.quit)
-    app.exec()
+    # 不能用 app.quit()：Qt6 的 quit() 会先关闭所有顶层窗口，主窗口随之变成不可见。
+    loop = QEventLoop()
+    QTimer.singleShot(ms, loop.quit)
+    loop.exec()
 
 
 def grab_screen(app: QApplication, w: QWidget, name: str) -> None:

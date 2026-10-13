@@ -23,6 +23,9 @@ LOWER_IS_BETTER = {
     "idle_rss_mb": True,
     "buffered_stream_chars_per_s": False,
     "buffered_frame_ms_avg": True,
+    "multipara_stream_chars_per_s": False,
+    "multipara_frame_ms_avg": True,
+    "multipara_frame_ms_p95": True,
 }
 
 
@@ -82,7 +85,9 @@ def bench_stream(app: QApplication) -> float:
     return rate
 
 
-def bench_stream_buffered(app: QApplication) -> dict[str, float]:
+def bench_stream_buffered(
+    app: QApplication, prefix: str = "buffered", para_every: int = 0
+) -> dict[str, float]:
     """模拟后端逐 token 推送，经 ChatView.stream 节流后写入模型；统计吞吐、模型更新次数与帧耗时。"""
     from braid.ui.chat_view import ChatView
 
@@ -99,8 +104,11 @@ def bench_stream_buffered(app: QApplication) -> dict[str, float]:
     frames: list[float] = []
     v.stream.start(row)
     t0 = time.perf_counter()
+    sent = 0
     for i in range(n):
-        v.stream.push(token)
+        tok = token + "\n" if para_every and i % para_every == para_every - 1 else token
+        sent += len(tok)
+        v.stream.push(tok)
         if i % 8 == 7:  # 与 ChatController 每轮取 8 块一致
             f0 = time.perf_counter()
             app.processEvents()
@@ -113,11 +121,16 @@ def bench_stream_buffered(app: QApplication) -> dict[str, float]:
     v.close()
     frames.sort()
     return {
-        "buffered_stream_chars_per_s": n * len(token) / dt,
-        "buffered_stream_updates": float(updates[0]),
-        "buffered_frame_ms_avg": sum(frames) / len(frames),
-        "buffered_frame_ms_p95": frames[int(len(frames) * 0.95)],
+        f"{prefix}_stream_chars_per_s": sent / dt,
+        f"{prefix}_stream_updates": float(updates[0]),
+        f"{prefix}_frame_ms_avg": sum(frames) / len(frames),
+        f"{prefix}_frame_ms_p95": frames[int(len(frames) * 0.95)],
     }
+
+
+def bench_stream_multipara(app: QApplication) -> dict[str, float]:
+    """多段落流式：每 40 块插入换行（约 6000 字、75 段），增量排版只需重排末段。"""
+    return bench_stream_buffered(app, prefix="multipara", para_every=40)
 
 
 def bench_idle_mem(app: QApplication) -> float:
@@ -164,6 +177,7 @@ def main() -> int:
         "scroll_ms_per_frame": bench_scroll(app),
         "stream_chars_per_s": bench_stream(app),
         **bench_stream_buffered(app),
+        **bench_stream_multipara(app),
         "platform": sys.platform,
     }
     with open(a.out, "w", encoding="utf-8") as f:

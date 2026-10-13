@@ -22,6 +22,7 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     QPoint,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QTimer,
@@ -581,12 +582,48 @@ class _DocCache:
         return self._blocks.get(id(doc), [])
 
 
+class _StreamDoc:
+    """流式行的增量排版：只把新增尾部插入同一个 QTextDocument。
+
+    QTextDocumentLayout 只重排受影响的段落，前面已排好的段落与高度都保留，
+    所以每帧成本与新增文本量相关，而不是与整条消息长度相关。不进 _DocCache
+    （它按完整文本做键，流式时每帧都会生成一份新文档）。
+    """
+
+    def __init__(self) -> None:
+        self.text = ""
+        self.width = -1
+        self.doc = QTextDocument()
+        self.doc.setDocumentMargin(0)
+        self.doc.setUndoRedoEnabled(False)
+        self._cursor = QTextCursor(self.doc)
+
+    def update(self, text: str, width: int) -> QTextDocument:
+        if width != self.width:
+            self.width = width
+            self.doc.setTextWidth(width)
+        if text == self.text:
+            return self.doc
+        if self.text and text.startswith(self.text):
+            # 光标在上次插入后已停在末尾；只在被意外移动时才重新定位
+            if self._cursor.position() != self.doc.characterCount() - 1:
+                self._cursor.movePosition(QTextCursor.MoveOperation.End)
+            self._cursor.insertText(text[len(self.text) :])
+        else:
+            self.doc.setPlainText(text)
+            self.doc.setTextWidth(width)
+        self.text = text
+        return self.doc
+
+
 class ChatDelegate(QStyledItemDelegate):
     actionTriggered = Signal(int, str)  # row, action: copy/retry/edit/prev/next
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.cache = _DocCache()
+        # 正在流式输出的行（按 ChatItem 身份）-> 增量文档
+        self._streams: dict[int, tuple[ChatItem, _StreamDoc]] = {}
         self.hover_row = -1
         self.dark_override: bool | None = None  # None 表示跟随 app 的 braidDark
         self.hover_pos: QPoint | None = None  # 视图坐标，用于代码块悬停“复制”
@@ -639,8 +676,25 @@ class ChatDelegate(QStyledItemDelegate):
         return int(col_w * 0.8) - 2 * PAD if item.role == "user" else col_w
 
     def _doc(self, item: ChatItem, tw: int) -> QTextDocument:
+        if item.streaming and item.render_mode == "plain" and item.text:
+            return self._stream_doc(item, tw)
+        if self._streams:
+            self._prune_streams()
         exp = frozenset(b for v, b in item.code_expanded if v == item.current)
         return self.cache.get(item.text or " ", tw, self.dark, item.render_mode, exp)
+
+    def _prune_streams(self) -> None:
+        """释放已结束流式的增量文档。"""
+        for k in [k for k, (it, _s) in self._streams.items() if not it.streaming]:
+            del self._streams[k]
+
+    def _stream_doc(self, item: ChatItem, tw: int) -> QTextDocument:
+        self._prune_streams()
+        entry = self._streams.get(id(item))
+        if entry is None or entry[0] is not item:
+            entry = (item, _StreamDoc())
+            self._streams[id(item)] = entry
+        return entry[1].update(item.text, tw)
 
     def _code_rects(
         self, item: ChatItem, bubble: QRect, doc: QTextDocument
@@ -740,6 +794,12 @@ class ChatDelegate(QStyledItemDelegate):
         painter.save()
         painter.translate(bubble.x() + PAD, bubble.y() + PAD)
         ctx = QAbstractTextDocumentLayout.PaintContext()
+        # 只绘制视口内可见的部分：长消息（尤其流式中的最后一行）不再整篇重画
+        widget = option.widget
+        if isinstance(widget, QAbstractItemView):
+            vis = widget.viewport().rect().intersected(rect)
+            if not vis.isEmpty():
+                ctx.clip = QRectF(vis.translated(-(bubble.x() + PAD), -(bubble.y() + PAD)))
         ctx.palette.setColor(QPalette.ColorRole.Text, QColor(THEME[self.dark]["text"]))
         doc.documentLayout().draw(painter, ctx)
         painter.restore()

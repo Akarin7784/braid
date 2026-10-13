@@ -9,14 +9,22 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QImage, QKeyEvent
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QDragEnterEvent,
+    QDropEvent,
+    QImage,
+    QKeyEvent,
+    QKeySequence,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
-    QMenu,
     QPushButton,
     QTextEdit,
     QToolButton,
@@ -25,6 +33,8 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import ModelInfo
+from braid.core.settings import settings
+from braid.theme.menu import RoundedMenu
 
 
 @dataclass(frozen=True)
@@ -41,7 +51,7 @@ DEFAULT_COMMANDS = [
     SlashCommand("help", "查看可用命令"),
 ]
 PERMISSIONS = [("ask", "每次询问"), ("auto-edit", "自动编辑"), ("full", "完全自主")]
-REASONING = [("low", "推理 低"), ("medium", "推理 中"), ("high", "推理 高")]
+REASONING_LABELS = {"low": "低", "medium": "中", "high": "高", "max": "最高"}
 
 
 class _Input(QTextEdit):
@@ -126,6 +136,7 @@ class Composer(QFrame):
     """发出 `submitted(text, attachments)`、`stopRequested()`、`commandTriggered(name)`。"""
 
     submitted = Signal(str, list)
+    selectionChanged = Signal(str, str)  # model_id, reasoning（不支持时为空串）
     stopRequested = Signal()
     commandTriggered = Signal(str)
 
@@ -140,9 +151,10 @@ class Composer(QFrame):
         self.commands = commands or DEFAULT_COMMANDS
         self.attachments: list[str] = []
         self.busy = False
-        self.model_id = models[0].id if models else ""
+        self.models = {m.id: m for m in models}
+        self.model_id = ""
+        self.reasoning = ""
         self.permission = "ask"
-        self.reasoning = "medium"
 
         col = QVBoxLayout(self)
         col.setContentsMargins(12, 10, 10, 10)
@@ -154,6 +166,7 @@ class Composer(QFrame):
         self.input.setMinimumHeight(48)
         self.input.setMaximumHeight(200)
         self.input.textChanged.connect(self._autosize)
+        self.input.setFixedHeight(48)
         col.addWidget(self.input)
 
         bar = QHBoxLayout()
@@ -163,13 +176,18 @@ class Composer(QFrame):
         self.attach_btn.setToolTip("添加附件")
         self.attach_btn.clicked.connect(self._pick_files)
         bar.addWidget(self.attach_btn)
-        self.model_chip = self._menu_chip(
-            [(m.id, m.name) for m in models], self.model_id, "model_id"
-        )
+        self.model_chip = QToolButton()
+        self.model_chip.setObjectName("ModelChip")
+        self.model_chip.setProperty("role", "modelChip")
+        self.model_chip.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.model_chip.setToolTip("模型与推理强度（Ctrl+Shift+I）")
+        self.model_menu = self._build_model_menu(models)
+        self.model_chip.setMenu(self.model_menu)
+        QShortcut(QKeySequence("Ctrl+Shift+I"), self, self.open_model_menu)
         self.perm_chip = self._menu_chip(PERMISSIONS, self.permission, "permission")
-        self.reason_chip = self._menu_chip(REASONING, self.reasoning, "reasoning")
-        for c in (self.model_chip, self.perm_chip, self.reason_chip):
+        for c in (self.model_chip, self.perm_chip):
             bar.addWidget(c)
+        self.set_selection(settings.default_model, settings.default_reasoning)
         bar.addStretch(1)
         self.send_btn = QPushButton("\u2191")
         self.send_btn.setObjectName("SendButton")
@@ -196,7 +214,7 @@ class Composer(QFrame):
     # 底栏 chip
     def _menu_chip(self, opts: list[tuple[str, str]], cur: str, attr: str) -> QToolButton:
         chip = _chip(dict(opts).get(cur, cur))
-        menu = QMenu(chip)
+        menu = RoundedMenu(chip)
         for key, label in opts:
             act = QAction(label, menu, checkable=True, checked=key == cur)
 
@@ -210,6 +228,64 @@ class Composer(QFrame):
             menu.addAction(act)
         chip.setMenu(menu)
         return chip
+
+    # 模型 × 推理强度 两级菜单
+    def _build_model_menu(self, models: list[ModelInfo]) -> RoundedMenu:
+        menu = RoundedMenu(self)
+        self._model_actions: dict[str, QAction] = {}
+        self._level_actions: dict[tuple[str, str], QAction] = {}
+        group = QActionGroup(menu)
+        providers: dict[str, list[ModelInfo]] = {}
+        for m in models:
+            providers.setdefault(m.provider or "其他", []).append(m)
+        for provider, items in providers.items():
+            menu.addGroupHeader(provider)
+            for m in items:
+                if m.reasoning_levels:
+                    sub = menu.addMenu(m.name)
+                    act = sub.menuAction()
+                    for lv in m.reasoning_levels:
+                        la = QAction(REASONING_LABELS.get(lv, lv), sub, checkable=True)
+                        la.triggered.connect(
+                            lambda _=False, mid=m.id, lv=lv: self.set_selection(mid, lv)
+                        )
+                        group.addAction(la)
+                        sub.addAction(la)
+                        self._level_actions[(m.id, lv)] = la
+                else:
+                    act = QAction(m.name, menu)
+                    act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, ""))
+                    menu.addAction(act)
+                act.setCheckable(True)
+                self._model_actions[m.id] = act
+        return menu
+
+    def set_selection(self, model_id: str, reasoning: str | None = None) -> None:
+        m = self.models.get(model_id) or next(iter(self.models.values()), None)
+        if m is None:
+            return
+        levels = m.reasoning_levels
+        if not levels:
+            lv = ""
+        elif reasoning in levels:
+            lv = reasoning or ""
+        elif settings.default_reasoning in levels:
+            lv = settings.default_reasoning
+        else:
+            lv = levels[len(levels) // 2]
+        self.model_id, self.reasoning = m.id, lv
+        for mid, a in self._model_actions.items():
+            a.setChecked(mid == m.id)
+            f = a.font()
+            f.setBold(mid == m.id)
+            a.setFont(f)
+        for (mid, l2), a in self._level_actions.items():
+            a.setChecked(mid == m.id and l2 == lv)
+        self.model_chip.setText(m.name + (f" · {REASONING_LABELS.get(lv, lv)}" if lv else ""))
+        self.selectionChanged.emit(self.model_id, self.reasoning)
+
+    def open_model_menu(self) -> None:
+        self.model_chip.showMenu()
 
     def _autosize(self) -> None:
         h = int(self.input.document().size().height()) + 12

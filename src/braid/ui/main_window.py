@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import AgentBackend
+from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
         composer.stopRequested.connect(self.chat.stop)
         composer.commandTriggered.connect(self._command)
         self.chat.busyChanged.connect(composer.set_busy)
+        composer.selectionChanged.connect(self._remember_selection)
         self.chat.editRequested.connect(composer.set_text)
         cl.addWidget(composer)
 
@@ -129,9 +131,19 @@ class MainWindow(QMainWindow):
         s = self._sessions[row]
         self.title.setText(s.title)
         self.chat.open_session(s.id)
+        self._current = s
+        self.composer.set_selection(
+            s.model_id or settings.default_model, s.reasoning or settings.default_reasoning
+        )
+
+    def _remember_selection(self, model_id: str, reasoning: str) -> None:
+        s = getattr(self, "_current", None)
+        if s is not None:
+            s.model_id, s.reasoning = model_id, reasoning
 
     def _submit(self, text: str, attachments: list[str]) -> None:
         self.chat.model_id = self.composer.model_id
+        self.chat.reasoning = self.composer.reasoning
         if attachments:
             names = ", ".join(a.rsplit("/", 1)[-1] for a in attachments)
             text = f"{text}\n\n附件：{names}".strip()

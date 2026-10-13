@@ -24,12 +24,18 @@ class Session:
     project: str | None = None
     parent_id: str | None = None  # 分支来源
     messages: list[Message] = field(default_factory=list)
+    # 会话自己的模型与推理强度；None 表示使用设置里的默认值
+    model_id: str | None = None
+    reasoning: str | None = None
 
 
 @dataclass
 class ModelInfo:
     id: str
     name: str
+    provider: str = ""
+    # 支持的推理强度档位，按从低到高排列；空表示不支持推理强度
+    reasoning_levels: tuple[str, ...] = ()
 
 
 @dataclass

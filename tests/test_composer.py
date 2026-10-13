@@ -6,7 +6,11 @@ from PySide6.QtGui import QImage
 from braid.core.backend import ModelInfo
 from braid.ui.composer import Composer
 
-MODELS = [ModelInfo("a", "Model A"), ModelInfo("b", "Model B")]
+MODELS = [
+    ModelInfo("a", "Model A", "P1", ("low", "medium", "high", "max")),
+    ModelInfo("b", "Model B", "P1", ("low", "medium")),
+    ModelInfo("c", "Model C", "P2"),
+]
 
 
 def _make(qtbot):
@@ -58,12 +62,60 @@ def test_paste_image_and_urls(qtbot, tmp_path):
     assert len(sig.args[1]) == 2 and c.attachments == []
 
 
-def test_chips_change_state(qtbot):
+def _sub(c, mid):
+    return c._model_actions[mid].menu()
+
+
+def test_default_selection_text(qtbot):
     c = _make(qtbot)
-    c.model_chip.menu().actions()[1].trigger()
-    c.reason_chip.menu().actions()[2].trigger()
-    assert c.model_id == "b" and c.model_chip.text() == "Model B"
-    assert c.reasoning == "high"
+    assert (c.model_id, c.reasoning) == ("a", "medium")
+    assert c.model_chip.text() == "Model A · 中"
+
+
+def test_submenu_and_pick_updates_chip(qtbot):
+    c = _make(qtbot)
+    sub = _sub(c, "b")
+    assert [a.text() for a in sub.actions()] == ["低", "中"]
+    with qtbot.waitSignal(c.selectionChanged) as sig:
+        sub.actions()[0].trigger()
+    assert sig.args == ["b", "low"]
+    assert c.model_chip.text() == "Model B · 低"
+    assert c._model_actions["b"].isChecked() and not c._model_actions["a"].isChecked()
+    assert sub.actions()[0].isChecked()
+
+
+def test_model_without_reasoning_has_no_submenu(qtbot):
+    c = _make(qtbot)
+    act = c._model_actions["c"]
+    assert act.menu() is None
+    act.trigger()
+    assert (c.model_id, c.reasoning) == ("c", "") and c.model_chip.text() == "Model C"
+
+
+def test_provider_headers(qtbot):
+    c = _make(qtbot)
+    headers = [a.text() for a in c.model_menu.actions() if not a.isEnabled()]
+    assert headers == ["P1", "P2"]
+
+
+def test_unsupported_level_falls_back(qtbot):
+    c = _make(qtbot)
+    c.set_selection("b", "max")
+    assert c.reasoning == "medium"
+
+
+def test_per_session_selection_persists(qtbot):
+    from braid.backends.mock import MockBackend
+    from braid.ui.main_window import MainWindow
+
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w._open(0)
+    w.composer.set_selection("mock-fast", "low")
+    w._open(1)
+    assert w.composer.model_id == "mock-large"  # 新会话用默认值
+    w._open(0)
+    assert (w.composer.model_id, w.composer.reasoning) == ("mock-fast", "low")
 
 
 def test_slash_menu(qtbot):

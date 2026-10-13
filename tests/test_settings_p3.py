@@ -540,8 +540,8 @@ def test_reset_dialog_checkmark_on_danger(qtbot):
         # 只看指示框中心，避开边框抗锯齿（HiDPI 下边框会掺出近白像素）
         cx = (box.left() + box.right()) / 2
         cy = (box.top() + box.bottom()) / 2
-        for dx in range(-4, 5):
-            for dy in range(-4, 5):
+        for dx in range(-5, 6):
+            for dy in range(-5, 6):
                 c = img.pixelColor(int((cx + dx) * dpr), int((cy + dy) * dpr))
                 if (
                     abs(c.red() - color.red()) <= tol

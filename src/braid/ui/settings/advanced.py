@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QMargins, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPainter, QPaintEvent, QShowEvent
+from PySide6.QtGui import QFont, QPainter, QPainterPath, QPaintEvent, QPen, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -56,7 +56,7 @@ CHECK_PX = 12
 
 
 class DangerCheckBox(QCheckBox):
-    """勾选时在指示框里画 12px ✓，颜色 on_danger（指示框底色由 QSS 设为 danger）。"""
+    """勾选时在指示框里画 ~12px ✓（笔画路径，不依赖字体字形），颜色 on_danger。"""
 
     def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
         super().paintEvent(e)
@@ -65,12 +65,22 @@ class DangerCheckBox(QCheckBox):
         opt = QStyleOptionButton()
         self.initStyleOption(opt)
         box = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, opt, self)
+        # 单位正方形上的 ✓：左中 → 底中偏左 → 右上；缩放到 CHECK_PX 后居中
+        side = float(CHECK_PX)
+        ox = box.center().x() - side / 2
+        oy = box.center().y() - side / 2
+        path = QPainterPath()
+        path.moveTo(ox + 0.12 * side, oy + 0.50 * side)
+        path.lineTo(ox + 0.40 * side, oy + 0.78 * side)
+        path.lineTo(ox + 0.88 * side, oy + 0.22 * side)
         p = QPainter(self)
-        p.setPen(qcolor("on_danger", is_dark()))
-        f = QFont(self.font())
-        f.setPixelSize(CHECK_PX)
-        p.setFont(f)
-        p.drawText(box, Qt.AlignmentFlag.AlignCenter, "✓")
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(qcolor("on_danger", is_dark()))
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.drawPath(path)
         p.end()
 
 

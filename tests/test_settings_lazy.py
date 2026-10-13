@@ -89,7 +89,9 @@ def test_keyring_status_width_fixed(qtbot, tmp_path):
         fm = st.fontMetrics()
         final = KEYRING_OK if backend_ok else KEYRING_FAIL
         assert w0 >= fm.horizontalAdvance(final)
-        qtbot.waitUntil(lambda p=page: p.models.keyring_ok is not None)  # 首帧后自动检查
+        qtbot.waitUntil(
+            lambda p=page: p.models.keyring_ok is not None, timeout=5000
+        )  # 首帧后自动检查
         assert st.text() == final
         assert st.width() == w0 and st.mapTo(page, st.rect().topLeft()).x() == x0
         assert page.models.notice.isHidden() is backend_ok
@@ -112,7 +114,7 @@ def test_keyring_not_imported_until_deferred_check(tmp_path):
 import os, sys
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QDeadlineTimer, QEventLoop, QTimer
 from braid.core.providers import Provider, ProviderStore
 from braid.backends.mock import MockBackend
 from braid.ui.settings_page import SettingsPage
@@ -122,7 +124,10 @@ store.upsert(Provider(name="X"))
 page = SettingsPage(store, backend=MockBackend())
 a = "keyring" in sys.modules
 page.resize(1000, 700); page.show()
-loop = QEventLoop(page); QTimer.singleShot(300, page, loop.quit); loop.exec()
+# 等结果而不是固定等待：CI 上钥匙串后端可能很慢（同 qtbot.waitUntil(..., timeout=5000)）
+deadline = QDeadlineTimer(5000)
+while page.models.keyring_ok is None and not deadline.hasExpired():
+    loop = QEventLoop(page); QTimer.singleShot(10, page, loop.quit); loop.exec()
 b = "keyring" in sys.modules
 print(f"RESULT {a} {b} {page.models.keyring_ok is not None}")
 """
@@ -233,7 +238,7 @@ def test_keyring_check_runs_off_ui_thread(qtbot, tmp_path, monkeypatch):
     page.resize(1100, 760)
     page.show()
     qtbot.waitExposed(page)
-    qtbot.waitUntil(lambda: page.models.keyring_ok is not None, timeout=3000)
+    qtbot.waitUntil(lambda: page.models.keyring_ok is not None, timeout=5000)
     assert seen == ["braid-keyring-check"]
     assert page.models.keyring_status.text() == KEYRING_OK
     assert (
@@ -322,3 +327,45 @@ def test_first_visit_no_blank_frame(qtbot, tmp_path):
         assert any(c != bg for c in row)
     assert switched == [("agents", True), ("keybinds", True)]
     assert all(isinstance(w, QWidget) for w in placeholders)
+
+
+def test_slow_keyring_check_does_not_block_ui(qtbot, tmp_path, monkeypatch):
+    """后台检查很慢（模拟 CI 上的慢后端）时，界面线程照常跑事件循环，状态位一直是“检查中…”。"""
+    import threading
+    import time
+
+    from PySide6.QtCore import QTimer
+
+    from braid.core import secrets
+
+    release = threading.Event()
+
+    def slow() -> bool:
+        # 工作线程里至少拖 500ms，并一直等到断言做完才放行（慢 CI 上也不会提前返回）
+        time.sleep(0.5)
+        release.wait(5)
+        return True
+
+    monkeypatch.setattr(secrets, "keyring_available", slow)
+    page = _settings(qtbot, tmp_path)
+    page.resize(1100, 760)
+    page.show()
+    qtbot.waitExposed(page)
+    m = page.models
+    st = m.keyring_status
+    ticks: list[float] = []
+    ticker = QTimer(page)  # 归页面所有
+    ticker.setInterval(10)
+    ticker.timeout.connect(lambda: ticks.append(time.monotonic()))
+    ticker.start()
+    qtbot.waitUntil(lambda: m._check_thread is not None, timeout=5000)
+    assert m.keyring_ok is None and st.text() == KEYRING_CHECKING
+    qtbot.waitUntil(lambda: len(ticks) >= 10, timeout=5000)
+    # 结果还没到，事件循环已经转了 10 次以上，且相邻两次之间没有长时间卡顿
+    assert m.keyring_ok is None and st.text() == KEYRING_CHECKING
+    gaps = [b - a for a, b in zip(ticks, ticks[1:], strict=False)]
+    assert max(gaps) < 0.25, gaps
+    release.set()
+    qtbot.waitUntil(lambda: m.keyring_ok is not None, timeout=5000)
+    ticker.stop()
+    assert st.text() == KEYRING_OK

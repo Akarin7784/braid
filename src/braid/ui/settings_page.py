@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -268,6 +269,10 @@ class SettingsPage(QWidget):
         scroll = QScrollArea(self)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setWidgetResizable(True)
+        # 内容宽度随视口收缩，窄窗口下不再露出横向滚动条（只保留纵向滚动）
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.models.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.scroll_area = scroll
         scroll.setWidget(self.models)
         self.stack.addWidget(scroll)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)

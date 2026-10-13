@@ -1,3 +1,6 @@
+import pytest
+from PySide6.QtCore import Qt
+
 from braid.core import secrets
 from braid.core.providers import Provider, ProviderStore
 from braid.ui.settings_page import SAVED_TEXT, SettingsPage, mask_key
@@ -72,3 +75,28 @@ def test_eye_icon_follows_state(qtbot, tmp_path):
     assert key.eye.property("eyeState") == "closed" and not key.eye.icon().isNull()
     key.toggle_reveal()
     assert key.eye.property("eyeState") == "open" and not key.eye.icon().isNull()
+
+
+@pytest.mark.parametrize("width", [1280, 900, 640])
+def test_settings_no_horizontal_scrollbar_or_size_grip(qtbot, width: int) -> None:
+    from PySide6.QtWidgets import QScrollBar, QSizeGrip
+
+    from braid.backends.mock import MockBackend
+    from braid.ui.main_window import MainWindow
+
+    w = MainWindow(MockBackend())
+    qtbot.addWidget(w)
+    w.resize(width, 800)
+    w.show()
+    w.show_settings(True)
+    qtbot.wait(50)
+    page = w.findChild(SettingsPage)
+    assert page is not None
+    assert page.scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    bars = [
+        b
+        for b in page.findChildren(QScrollBar)
+        if b.orientation() == Qt.Orientation.Horizontal and b.isVisible()
+    ]
+    assert bars == []
+    assert [g for g in w.findChildren(QSizeGrip) if g.isVisible()] == []

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Braid pre-commit: check-only (never modifies files). Runs ruff on staged .py files.
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+mapfile -t files < <(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ ${#files[@]} -eq 0 ] && exit 0
+if [ -x "$root/.venv/bin/ruff" ]; then
+  RUFF="$root/.venv/bin/ruff"
+elif command -v ruff >/dev/null 2>&1; then
+  RUFF="$(command -v ruff)"
+else
+  echo "pre-commit: 找不到 ruff（$root/.venv/bin/ruff 和 PATH 里都没有）。请先安装 dev 依赖。" >&2
+  exit 1
+fi
+cd "$root"
+status=0
+"$RUFF" check --no-fix -- "${files[@]}" || status=1
+"$RUFF" format --check -- "${files[@]}" || status=1
+if [ $status -ne 0 ]; then
+  echo "pre-commit: ruff 检查未通过。修复后重新 git add 再提交（紧急情况可用 --no-verify）。" >&2
+fi
+exit $status

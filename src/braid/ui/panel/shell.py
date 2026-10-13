@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.artifacts import ArtifactSource
+from braid.core.browser import BrowserController
 from braid.core.git import GitSource
 from braid.ui.panel.tokens import tokens
 
@@ -104,6 +105,7 @@ class RightPanel(QFrame):
         mode: str = "light",
         artifact_source: ArtifactSource | None = None,
         git_source: GitSource | None = None,
+        browser_controller: BrowserController | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("RightPanel")
@@ -141,6 +143,8 @@ class RightPanel(QFrame):
         # 浏览器页延迟创建：首次切到该标签才 import（将来 QtWebEngine 在那里导入）
         self.stack.addWidget(QWidget())
         self.browser_loaded = False
+        self.browser_controller = browser_controller
+        self.theme_mode = mode
         if git_source is not None:
             from braid.ui.panel.git import GitPage
 
@@ -183,7 +187,8 @@ class RightPanel(QFrame):
         from braid.ui.panel.browser import BrowserPage  # 延迟导入
 
         self.browser_loaded = True
-        self.set_page(BROWSER_TAB, BrowserPage())
+        self.browser: QWidget = BrowserPage(self.browser_controller, theme=self.theme_mode)
+        self.set_page(BROWSER_TAB, self.browser)
 
     def set_current(self, index: int) -> None:
         if index == BROWSER_TAB:

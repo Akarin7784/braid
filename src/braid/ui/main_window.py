@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QSpacerItem,
     QSplitter,
     QTabBar,
     QVBoxLayout,
@@ -59,7 +60,7 @@ class MainWindow(QMainWindow):
         chat = QFrame()
         chat.setObjectName("ChatArea")
         cl = QVBoxLayout(chat)
-        cl.setContentsMargins(24, 12, 24, 16)
+        cl.setContentsMargins(24, 12, 16, 16)
         top = QHBoxLayout()
         self.sidebar_toggle = _btn("\u2630", "ghost")
         self.sidebar_toggle.setObjectName("SidebarToggle")
@@ -76,7 +77,10 @@ class MainWindow(QMainWindow):
         self.panel_toggle.clicked.connect(lambda: self.set_panel_open(not self.panel_open()))
         top.addWidget(self.panel_toggle)
         # 给浮层窗口控制按钮留位置（收起侧面板时按钮在这里）
-        top.addSpacing(WindowControls.reserved_width() + 16 - 24)
+        # 右栏收起时按钮浮在这里：开关距按钮 8px；右栏打开时开关贴中栏右缘 16px
+        self._top_spacer = QSpacerItem(0, 0)
+        top.addSpacerItem(self._top_spacer)
+        self._top_bar = top
         cl.addLayout(top)
         self.chat_view = ChatView()
         cl.addWidget(self.chat_view, 1)
@@ -182,6 +186,7 @@ class MainWindow(QMainWindow):
         target = self._panel_width if open_ else 0
         start = sizes[2] if self.panel.isVisible() else 0
         self.panel.setVisible(True)
+        self._sync_top_spacer()
 
         def step(v: object) -> None:
             cur = self.splitter.sizes()
@@ -194,6 +199,7 @@ class MainWindow(QMainWindow):
             if not open_:
                 self.panel.setVisible(False)
             self._place_controls()
+            self._sync_top_spacer()
 
         if not animate:
             step(target)
@@ -206,7 +212,16 @@ class MainWindow(QMainWindow):
         self._anim = a
         a.start()
 
+    def _sync_top_spacer(self) -> None:
+        sp = getattr(self, "_top_spacer", None)
+        if sp is None:
+            return
+        w = 0 if self.panel.isVisible() else WindowControls.reserved_width() + 8 - 16
+        sp.changeSize(w, 0)
+        self._top_bar.invalidate()
+
     def _place_controls(self) -> None:
+        self._sync_top_spacer()
         c = getattr(self, "controls", None)
         if c is None:
             return

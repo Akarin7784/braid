@@ -712,7 +712,7 @@ class ChatDelegate(QStyledItemDelegate):
             NineSliceShadow.get("e2", self.dark).paint(painter, bubble)
             painter.restore()
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(t["bubble"]))
+            painter.setBrush(QColor(t["subtle"] if self.dark else t["bubble"]))
             painter.drawRoundedRect(bubble, 12, 12)
         codes = self._code_rects(item, bubble, doc)
         painter.setPen(Qt.PenStyle.NoPen)

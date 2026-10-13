@@ -103,7 +103,27 @@ def test_title_font_uses_real_face(qapp):
         # 2. 存在但 Qt 选不上的候选（如 CI 上的 Medium）跳过，取第一个选得上的，否则 400
         expected = next((cw for cf, cs, cw in spw.title_faces(base) if _resolves(cf, cs, cw)), 400)
         assert w == expected, (w, expected, spw.title_faces(base))
-    assert {fam for fam, _ in _faces(f, "Models")} == {"Inter"}
+    # 标题拉丁走 Inter；仅当族链选不上中文真实字面、降级为只用中文族时例外（正文拉丁不受影响）
+    if spw.title_degraded(f):
+        assert fam is not None and f.families() == [fam]
+    else:
+        assert {fam for fam, _ in _faces(f, "Models")} == {"Inter"}
+
+
+def test_title_font_probe_cached(qapp, monkeypatch):
+    """同一 (族, 候选, 字号) 只探测一次：设置页每个分区标题都会调 title_font()。"""
+    register_bundled_fonts()
+    base = QFont(qapp.font())
+    base.setFamilies(["Inter", *spw.CJK_FALLBACK])
+    spw._title_spec.cache_clear()
+    calls = []
+    real = spw.cjk_faces
+    monkeypatch.setattr(spw, "cjk_faces", lambda *a: calls.append(1) or real(*a))
+    a = spw.title_font(base, 18)
+    n = len(calls)
+    b = spw.title_font(base, 18)
+    assert len(calls) == n and a == b
+    spw._title_spec.cache_clear()
 
 
 def test_title_font_style_name_from_db(monkeypatch, qapp):

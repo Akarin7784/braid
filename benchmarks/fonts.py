@@ -3,7 +3,7 @@
 用法：python benchmarks/fonts.py [fonts.txt]
 构建主窗口并打开设置页，用 QTextLayout 的 glyphRuns 取每段字形实际使用的 rawFont，
 把族名/字重/字面写进 fonts.txt。以下情况退出码非 0：
-- 拉丁文没落到随包的 Inter；
+- 拉丁文没落到随包的 Inter（标题降级为只用中文族时，标题拉丁只记录不算失败）；
 - 中文没落到本平台预期的系统字体；
 - 标题要了 600 字重，但中文实际字面不是真正的 Medium/Semibold/Bold（即合成粗体）。
 """
@@ -25,6 +25,7 @@ from braid.ui.main_window import MainWindow
 from braid.ui.settings.widgets import (
     _style_weight,
     resolved_cjk_family,
+    title_degraded,
     title_faces,
     title_weight,
 )
@@ -123,12 +124,19 @@ def main() -> int:
         # title_font() 验证首选字面不能真正用上时会降档；降档不是错误，合成粗体才是
         lines.append(f"  note: 首选 {int(want)} 用不上，降到 {int(title_font.weight())}")
     tl = report("title-latin", title_font, TITLE_LATIN)
-    if not tl or any(fam != "Inter" for fam, *_ in tl):
+    if title_degraded(title_font):
+        # 只放宽标题拉丁：族链 [Inter, 中文] 选不上中文真实中间字重（见 _title_spec），
+        # 标题降级为只用中文族；正文拉丁仍硬性要求 Inter
+        lines.append(
+            "  note: 降级——族链选不上中文真实字面，标题只用中文族，"
+            f"标题拉丁字母用 {sorted({r[0] for r in tl})} 的拉丁字形（不算失败）"
+        )
+    elif not tl or any(fam != "Inter" for fam, *_ in tl):
         errors.append(f"标题拉丁文没有落到 Inter：{[r[0] for r in tl]}")
     tit = report("title", title_font, TITLE)
     for fam, _wt, style, _n in tit:
         lines.append(f"    styles({fam}): {QFontDatabase.styles(fam)}")
-        if exp and fam not in exp:
+        if exp and not any(fam == e or fam == f"{e} {style}" for e in exp):
             errors.append(f"标题中文落到 {fam}，预期 {exp}")
         req = int(title_font.weight())
         got = _style_weight(style)

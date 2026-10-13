@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Sequence
 from importlib.resources import files
@@ -118,31 +119,74 @@ def cjk_faces(font: QFont, text: str = TITLE_SAMPLE) -> list[tuple[str, str]]:
     return [(r.rawFont().familyName(), r.rawFont().styleName()) for r in lay.glyphRuns()]
 
 
-def title_font(base: QFont, px: int) -> QFont:
-    """构造标题字体：拉丁字母走 base 的首选族（Inter），中文显式用 title_faces() 选中的真实字面。
+def _same_face(got_fam: str, got_style: str, fam: str, style: str, w: int) -> bool:
+    """glyphRuns 落到的字面是否就是 (fam, style)。
 
-    依次尝试：只设字重 → 再加该族的实际样式名；用 glyphRuns 验证中文确实落到那个字面
-    （不是系统别名、不是 Regular 加合成粗体）。都不行就降到下一档，最后用常规字重。
+    Linux fontconfig 会把非 Regular/Bold 的字面按 typographic 名报成独立族
+    （如 "Noto Sans CJK SC Medium"），它与 "Noto Sans CJK SC" + Medium 是同一个真实字面。
     """
-    latin = [f for f in base.families() if f not in CJK_FALLBACK][:1] or ["Inter"]
-    faces = title_faces(base)
-    for fam, style, w in faces:
-        for use_style in (False, True):
-            f = QFont(base)
-            f.setFamilies([*latin, fam])
-            f.setPixelSize(px)
-            f.setWeight(_WEIGHT_ENUM[w])
-            if use_style:
-                f.setStyleName(style)
-            got = cjk_faces(f)
-            if got and all(gf == fam and _style_weight(gs) == w for gf, gs in got):
-                return f
-    f = QFont(base)
-    if faces:
-        f.setFamilies([*latin, faces[0][0]])
+    if _style_weight(got_style) != w:
+        return False
+    return got_fam == fam or got_fam == f"{fam} {style}"
+
+
+def _title_attempt(families: list[str], px: int, w: int, style: str) -> QFont:
+    f = QFont()
+    f.setFamilies(families)
     f.setPixelSize(px)
-    f.setWeight(QFont.Weight.Normal)
+    f.setWeight(_WEIGHT_ENUM[w])
+    if style:
+        f.setStyleName(style)
     return f
+
+
+@functools.lru_cache(maxsize=32)
+def _title_spec(
+    latin: tuple[str, ...], faces: tuple[tuple[str, str, int], ...], px: int
+) -> tuple[tuple[str, ...], int, str]:
+    """标题字体方案 (族链, 字重, 样式名)。
+
+    按进程缓存：glyphRuns 探测较贵，设置页每个分区标题都会调。
+
+    每档候选依次尝试：
+    1. 族链 [Inter, 中文族] 只设字重 → 再加样式名；
+    2. 降级：只用中文族（拉丁字母随之用中文字体自带的拉丁字形）。
+       Qt 的回落引擎沿用首选族的实际字重：随包 Inter 只有 Regular/SemiBold，
+       请求 500 时 Inter 解析成 Regular，中文回落随之也是 Regular；请求 600 时
+       Inter 为 SemiBold，fontconfig 给没有 SemiBold 的 Noto CJK 配到 Bold。
+       所以族链永远选不上 Noto 的 Medium，只能单用中文族。
+    用 glyphRuns 验证中文确实落到那个真实字面；都不行降到下一档，最后用常规字重。
+    """
+    for fam, style, w in faces:
+        for fams in ([*latin, fam], [fam]):
+            for st in ("", style):
+                got = cjk_faces(_title_attempt(fams, px, w, st))
+                if got and all(_same_face(gf, gs, fam, style, w) for gf, gs in got):
+                    return tuple(fams), w, st
+    return tuple([*latin, faces[0][0]] if faces else []), 400, ""
+
+
+def title_font(base: QFont, px: int) -> QFont:
+    """构造标题字体：拉丁字母走 base 的首选族（Inter），中文用 title_faces() 选中的真实字面。
+
+    规则见 _title_spec()；族链选不上时降级为只用中文族，此时 title_degraded() 为真。
+    """
+    latin = tuple([f for f in base.families() if f not in CJK_FALLBACK][:1] or ["Inter"])
+    fams, w, st = _title_spec(latin, tuple(title_faces(base)), px)
+    f = QFont(base)
+    if fams:
+        f.setFamilies(list(fams))
+    f.setPixelSize(px)
+    f.setWeight(_WEIGHT_ENUM[w])
+    if st:
+        f.setStyleName(st)
+    return f
+
+
+def title_degraded(font: QFont) -> bool:
+    """title_font() 结果是否走了降级（族链里没有拉丁族，标题拉丁字母用中文字体的字形）。"""
+    fams = font.families()
+    return bool(fams) and all(f in CJK_FALLBACK for f in fams)
 
 
 def _over(base: QColor, top: QColor, alpha: float) -> QColor:

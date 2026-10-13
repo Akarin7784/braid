@@ -89,6 +89,14 @@ class AgentBackend(ABC):
     def set_config(self, section: str, values: dict[str, Any]) -> None:
         """把 values 浅合并进分区并发出 config_changed(section)。"""
 
+    def replace_config(self, section: str, values: dict[str, Any]) -> None:
+        """整体替换分区（用于需要删除键的分区，如 ``keybinds``）并发出 config_changed。"""
+        raise NotImplementedError
+
+    def reset_config(self) -> None:
+        """所有分区恢复默认值，逐个发出 config_changed。不触碰钥匙串。"""
+        raise NotImplementedError
+
     def count_instruction_matches(self, pattern: str) -> int:
         """glob 形式的指令文件模式在项目里匹配到几个文件。默认 0。"""
         return 0

@@ -165,3 +165,25 @@ QToolButton#keyEye, QToolButton#providerMore { background: transparent; color: #
 QToolButton#keyEye:hover, QToolButton#providerMore:hover { background: #343433; }
 QMenu[danger="true"]::item { color: #E2685B; }
 QMenu[danger="true"]::item:selected { background: rgba(226, 104, 91, 31); }
+/* P3 快捷键 */
+#keyGroupTitle { color: #73736F; font-size: 11px; }
+QLabel#keyChip { background: #30302F; color: #ECECEA; border-radius: 6px; padding: 0 6px; }
+#keyCleared { color: #73736F; font-size: 12px; }
+QLabel#keyRecord { color: #73736F; font-size: 12px; background: transparent; }
+#keyNote { color: #73736F; font-size: 11px; }
+#keyConflict { color: #E0A54A; font-size: 12px; }
+QToolButton#keyReset { background: transparent; color: #73736F; border: none; padding: 0; font-size: 14px; }
+QToolButton#keyReset:hover { color: #ECECEA; }
+/* P3 高级 */
+#settingDesc, #snapshotNote { color: #A3A3A0; font-size: 12px; }
+#settingRow[dim="true"] QLabel#settingLabel, #settingRow[dim="true"] QLabel#fieldUnit { color: #73736F; }
+QLineEdit#settingsNumber:disabled { color: #73736F; }
+QToolButton#dangerTextButton { background: transparent; color: #E2685B; border: none; padding: 4px 10px; border-radius: 6px; }
+QToolButton#dangerTextButton:hover { background: rgba(226, 104, 91, 31); }
+QDialog#resetDialog { background: transparent; }
+#dialogTitle { color: #ECECEA; }
+#dialogDesc { color: #A3A3A0; font-size: 13px; }
+QToolButton#dialogCancel { background: #30302F; color: #ECECEA; border: none; border-radius: 8px; padding: 0 14px; }
+QToolButton#dialogCancel:hover { background: #343433; }
+QToolButton#dangerButton { background: #E2685B; color: #FFFFFF; border: none; border-radius: 8px; padding: 0 14px; }
+QDialog#resetDialog QCheckBox::indicator:checked { background: #E2685B; }

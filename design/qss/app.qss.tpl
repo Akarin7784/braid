@@ -165,3 +165,25 @@ QToolButton#keyEye, QToolButton#providerMore { background: transparent; color: $
 QToolButton#keyEye:hover, QToolButton#providerMore:hover { background: ${hover}; }
 QMenu[danger="true"]::item { color: ${danger}; }
 QMenu[danger="true"]::item:selected { background: ${danger_hover}; }
+/* P3 快捷键 */
+#keyGroupTitle { color: ${text3}; font-size: 11px; }
+QLabel#keyChip { background: ${control}; color: ${text}; border-radius: 6px; padding: 0 6px; }
+#keyCleared { color: ${text3}; font-size: 12px; }
+QLabel#keyRecord { color: ${text3}; font-size: 12px; background: transparent; }
+#keyNote { color: ${text3}; font-size: 11px; }
+#keyConflict { color: ${warning}; font-size: 12px; }
+QToolButton#keyReset { background: transparent; color: ${text3}; border: none; padding: 0; font-size: 14px; }
+QToolButton#keyReset:hover { color: ${text}; }
+/* P3 高级 */
+#settingDesc, #snapshotNote { color: ${text2}; font-size: 12px; }
+#settingRow[dim="true"] QLabel#settingLabel, #settingRow[dim="true"] QLabel#fieldUnit { color: ${text3}; }
+QLineEdit#settingsNumber:disabled { color: ${text3}; }
+QToolButton#dangerTextButton { background: transparent; color: ${danger}; border: none; padding: 4px 10px; border-radius: 6px; }
+QToolButton#dangerTextButton:hover { background: ${danger_hover}; }
+QDialog#resetDialog { background: transparent; }
+#dialogTitle { color: ${text}; }
+#dialogDesc { color: ${text2}; font-size: 13px; }
+QToolButton#dialogCancel { background: ${control}; color: ${text}; border: none; border-radius: 8px; padding: 0 14px; }
+QToolButton#dialogCancel:hover { background: ${hover}; }
+QToolButton#dangerButton { background: ${danger}; color: ${on_danger}; border: none; border-radius: 8px; padding: 0 14px; }
+QDialog#resetDialog QCheckBox::indicator:checked { background: ${danger}; }

@@ -376,7 +376,9 @@ def test_overflow_scrolls_inside_list_only(qtbot, tmp_path, monkeypatch):
         ap.add_agent()  # 新建会自动展开最后一个
     ed = ap.list.agent_rows()[-1].editor
     ed.grow.grow_to(400)
+    ap.list.fit_height()
     qtbot.wait(50)
+    QApplication.processEvents()
     assert sp.scrolls["agents"].verticalScrollBar().maximum() == 0  # 页面不滚
     inner = ap.list.list_scroll
     assert inner.verticalScrollBar().maximum() > 0  # 只有列表卡内部滚

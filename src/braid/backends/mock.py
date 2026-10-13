@@ -56,7 +56,36 @@ def default_config() -> dict[str, dict[str, Any]]:
             "shell": "/bin/bash",
         },
         "agents": {"default_agent": "build", "agents": ["build", "plan"]},
-        "mcp": {"servers": {}},
+        "mcp": {
+            # name -> {type: local/remote, command|url, enabled, status, error?}
+            "servers": {
+                "filesystem": {
+                    "type": "local",
+                    "command": "npx -y @modelcontextprotocol/server-filesystem ~",
+                    "enabled": True,
+                    "status": "connected",
+                },
+                "sqlite": {
+                    "type": "local",
+                    "command": "uvx mcp-server-sqlite --db-path data.db",
+                    "enabled": False,
+                    "status": "disconnected",
+                },
+                "context7": {
+                    "type": "remote",
+                    "url": "https://mcp.context7.com/mcp",
+                    "enabled": True,
+                    "status": "connected",
+                },
+                "sentry": {
+                    "type": "remote",
+                    "url": "https://mcp.sentry.dev/mcp",
+                    "enabled": True,
+                    "status": "error",
+                    "error": "HTTP 401 未授权",
+                },
+            },
+        },
         "rules": {"instructions": ["AGENTS.md"]},
         "keybinds": {"leader": "ctrl+x", "send": "enter", "newline": "shift+enter"},
         "advanced": {"share": "manual", "snapshot": True, "log_level": "info"},

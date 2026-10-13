@@ -149,7 +149,7 @@ def test_nav_and_placeholders(qtbot, tmp_path):
     assert page.nav.count() == 8
     assert isinstance(page.pages["permissions"], PermissionsPage)
     assert isinstance(page.pages["general"], GeneralPage)
-    for key in ("agents", "mcp", "rules", "keybinds", "advanced"):
+    for key in ("agents", "rules", "keybinds", "advanced"):
         assert isinstance(page.pages[key], PlaceholderPage)
     page.nav.setCurrentRow(4)
     assert page.stack.currentWidget() is page.scrolls["mcp"]

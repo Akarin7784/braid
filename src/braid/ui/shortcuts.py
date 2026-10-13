@@ -24,12 +24,16 @@ SECTION = "keybinds"
 COMPOSER_ACTIONS = frozenset({"input.send", "input.newline"})
 
 
-def display_text(seq: str) -> str:
-    """PortableText → 界面显示：macOS 连写符号（⌘⇧I），其他平台用 + 连接（Ctrl+Shift+I）。"""
-    from braid.ui.settings.keybinds import display_parts, is_mac
+def display_text(seq: str, mac: bool | None = None, win: bool | None = None) -> str:
+    """PortableText → 界面显示。
 
-    parts = display_parts(seq)
-    return ("" if is_mac() else "+").join(parts)
+    macOS 按 ⌃⌥⇧⌘ 顺序连写符号（Ctrl+Shift+I → ⇧⌘I），其他平台用 + 连接
+    （Ctrl+Shift+I）。``mac`` / ``win`` 为 None 时按当前平台，与设置页键帽同一套规则。
+    """
+    from braid.ui.settings import keybinds
+
+    mac = keybinds.is_mac() if mac is None else mac
+    return ("" if mac else "+").join(keybinds.display_parts(seq, mac=mac, win=win))
 
 
 class ShortcutRegistry(QObject):

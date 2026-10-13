@@ -111,7 +111,9 @@ def test_help_lists_commands_and_shortcuts(win):
     t = _last(win)
     for c in win.composer.commands:
         assert f"/{c.name}" in t
-    assert "Ctrl+Shift+I" in t or "⌘⇧I" in t
+    from braid.ui.shortcuts import display_text
+
+    assert f"切换模型：`{display_text('Ctrl+Shift+I')}`" in t
     assert "搜索：未设置" in t
 
 
@@ -134,3 +136,34 @@ def test_model_command_show_and_switch(win):
     win._submit("/model nope", [])
     assert win.composer.model_id == "local-7b"
     assert "没有找到" in _last(win)
+
+
+@pytest.mark.parametrize(
+    ("platform", "mac", "model_menu", "toggle_right", "send"),
+    [
+        ("darwin", True, "⇧⌘I", "⇧⌘B", "↩"),
+        ("linux", False, "Ctrl+Shift+I", "Ctrl+Shift+B", "Enter"),
+        ("win32", False, "Ctrl+Shift+I", "Ctrl+Shift+B", "Enter"),
+    ],
+)
+def test_help_shortcut_display_per_platform(
+    win, monkeypatch, platform, mac, model_menu, toggle_right, send
+):
+    """模拟各平台的显示路径：macOS 用 ⌃⌥⇧⌘ 顺序的符号，存储始终是 PortableText。"""
+    import sys
+
+    from braid.ui.settings import keybinds
+    from braid.ui.shortcuts import display_text
+
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(keybinds, "is_mac", lambda: mac)
+    assert display_text("Ctrl+Shift+I") == model_menu
+    win._command("help")
+    t = _last(win)
+    assert f"切换模型：`{model_menu}`" in t
+    assert f"收起右栏：`{toggle_right}`" in t
+    assert f"发送：`{send}`" in t
+    # 存储与 QShortcut 绑定不随显示平台变化
+    assert _seq(win, "input.model_menu") == "Ctrl+Shift+I"
+    win.composer.set_key_bindings(win.shortcuts.bindings)
+    assert model_menu in win.composer.model_chip.toolTip()

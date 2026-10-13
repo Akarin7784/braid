@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QHBoxLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
 from braid.core.backend import AgentBackend, Session
 from braid.core.session_store import SessionStore
 from braid.theme.palette import qcolor, tokens
+from braid.ui.icon_button import IconButton
 
 SID = Qt.ItemDataRole.UserRole
 HEADER = Qt.ItemDataRole.UserRole + 1
@@ -127,6 +129,7 @@ class SessionDelegate(QStyledItemDelegate):
 class Sidebar(QFrame):
     sessionSelected = Signal(object)  # Session
     entryTriggered = Signal(str)  # projects / artifacts / schedules
+    settingsRequested = Signal()
 
     def __init__(
         self,
@@ -190,6 +193,16 @@ class Sidebar(QFrame):
         self.list.itemChanged.connect(self._on_edited)
         self.list.itemClicked.connect(self._on_clicked)
         lay.addWidget(self.list, 1)
+        # 左下角齿轮：打开设置页（中栏切换，不另开窗口）
+        foot = QHBoxLayout()
+        foot.setContentsMargins(0, 0, 0, 0)
+        self.settings_btn = IconButton("gear")
+        self.settings_btn.setObjectName("SettingsButton")
+        self.settings_btn.setToolTip("设置")
+        self.settings_btn.clicked.connect(self.settingsRequested)
+        foot.addWidget(self.settings_btn)
+        foot.addStretch(1)
+        lay.addLayout(foot)
         self.rebuild()
 
     # ---- 数据操作 ----

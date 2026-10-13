@@ -210,7 +210,10 @@ class Sidebar(QFrame):
         return next((s for s in self.sessions if s.id == sid), None)
 
     def new_session(self) -> Session:
-        s = self.backend.create_session()
+        return self.add_session(self.backend.create_session())
+
+    def add_session(self, s: Session) -> Session:
+        """把后端已创建的会话（新建或分支）放到列表顶部并选中。"""
         self.sessions.insert(0, s)
         if self.store is not None:
             self.store.upsert(s.id, s.title, project_id=s.project_id)

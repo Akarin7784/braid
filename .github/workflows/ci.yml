@@ -110,6 +110,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
+      PYTHONUTF8: "1"  # Windows 控制台是 cp1252，中文输出会 UnicodeEncodeError
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
@@ -159,6 +160,20 @@ jobs:
           rc=$?
           cat "$out" || echo "自检没有写出结果文件"
           exit $rc
+      - name: 发版归档 + 体积报告（Linux tar.gz / mac dmg 保留符号链接，Windows zip）
+        id: pack
+        shell: bash
+        run: |
+          f=$(python packaging/package_report.py archive "${{ runner.os }}" | tail -n 1)
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+          # 体积与重复文件写进 size-<OS>.txt，并并入 selfcheck-<OS>.txt 的 package 字段；超线只告警
+          python packaging/package_report.py report "${{ runner.os }}" "$f"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: size-${{ runner.os }}.txt
+          path: size-${{ runner.os }}.txt
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -213,8 +228,10 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
+          # 上传的就是 release 要挂的文件；别再传 dist/，upload-artifact 会把符号链接展开成重复文件
           name: braid-${{ runner.os }}
-          path: dist/
+          path: ${{ steps.pack.outputs.file }}
+          compression-level: 0
 
   ui-xvfb:
     runs-on: ubuntu-latest

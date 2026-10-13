@@ -45,3 +45,17 @@ def test_sessions_pin_order_and_delete(tmp_path):
     ids = [r.id for r in SessionStore(tmp_path / "s.json").list_sessions()]
     assert ids == ["a", "b"]
     assert SessionStore(tmp_path / "s.json").list_sessions()[0].pinned is True
+
+
+def test_project_id_grouping_and_legacy_file(tmp_path):
+    import json
+
+    path = tmp_path / "s.json"
+    path.write_text(json.dumps({"sessions": [{"id": "old", "title": "旧", "updated_at": 5}]}))
+    s = SessionStore(path)
+    s.upsert("a", "A", updated_at=1, project_id="p1")
+    s.upsert("b", "B", updated_at=2, project_id="p1")
+    s.set_pinned("a", True)
+    s.set_project("old", None)
+    groups = SessionStore(path).grouped()
+    assert [(k, [r.id for r in v]) for k, v in groups] == [("p1", ["a", "b"]), (None, ["old"])]

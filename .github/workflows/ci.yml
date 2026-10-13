@@ -31,6 +31,11 @@ jobs:
               n = sum(1 for x in names if x.startswith(f"braid/assets/{d}/") and x.endswith(".png"))
               if n < 6:
                   miss.add(f"braid/assets/{d}/*.png（只有 {n} 张）")
+          for k in ("back", "forward", "reload", "stop", "external"):
+              for m in ("light", "dark"):
+                  f = f"braid/assets/icons/nav_{k}_{m}.png"
+                  if f not in names:
+                      miss.add(f)
           assert not miss, f"wheel 缺少: {sorted(miss)}"
           print("wheel 资源齐全")
           PY
@@ -62,6 +67,13 @@ jobs:
             n=$(find dist -path "*braid/assets/$d/*.png" | wc -l)
             [ "$n" -ge 6 ] || { echo "assets/$d 只有 $n 张 png，应至少 6 张"; exit 1; }
           done
+          miss=0
+          for k in back forward reload stop external; do
+            for m in light dark; do
+              find dist -path "*braid/assets/icons/nav_${k}_${m}.png" | grep -q . || { echo "缺少 nav_${k}_${m}.png"; miss=1; }
+            done
+          done
+          [ "$miss" -eq 0 ]
       - uses: actions/upload-artifact@v4
         with:
           name: braid-${{ runner.os }}

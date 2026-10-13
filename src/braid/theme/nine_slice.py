@@ -21,7 +21,7 @@ _LEVELS = {"e1": (12, 14, 2), "e2": (18, 14, 4), "e3": (24, 14, 4)}
 class NineSliceShadow:
     def __init__(self, level: str, dark: bool) -> None:
         self.margin, self.radius, self.dy = _LEVELS[level]
-        path = files("braid.assets.shadows") / f"{level}_{'dark' if dark else 'light'}.png"
+        path = files("braid.assets") / "shadows" / f"{level}_{'dark' if dark else 'light'}.png"
         self.pix = QPixmap(str(path))
 
     @staticmethod

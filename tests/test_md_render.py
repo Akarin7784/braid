@@ -15,7 +15,7 @@ def test_table_styled(qtbot):
     doc = _DocCache().get("| a | b |\n|---|---|\n| 1 | 2 |\n", 400, False)
     (t,) = _tables(doc)
     assert t.format().border() == 0
-    assert t.format().cellPadding() >= 4
+    assert t.cellAt(0, 0).format().toTableCellFormat().leftPadding() == 12
     assert t.cellAt(0, 0).format().background().style() != 0
 
 
@@ -108,3 +108,74 @@ def test_user_bubble_paints_shadow(qtbot, monkeypatch):
     p.end()
     assert ("e2", False) in calls and ("paint", True) in calls
     assert calls.count(("e2", False)) == 1  # 只给用户气泡画
+
+
+def _code_ctx(v, row=0):
+    item = v.chat_model.items[row]
+    rect = v.visualRect(v.chat_model.index(row))
+    col = v.delegate._column(rect.adjusted(0, chat_view.PAD // 2, 0, 0))
+    doc = v.delegate._doc(item, max(80, v.delegate._text_width(item, col.width())))
+    return item, rect, v.delegate._code_rects(item, v.delegate._bubble_rect(item, col, doc), doc)
+
+
+def test_copied_label_reverts(qtbot, monkeypatch):
+    monkeypatch.setattr(chat_view, "COPIED_MS", 80)
+    v = ChatView()
+    qtbot.addWidget(v)
+    v.resize(700, 600)
+    v.chat_model.set_messages([("assistant", "```\na()\n```\n\n```\nb()\n```\n")])
+    v.show()
+    qtbot.waitExposed(v)
+    item, rect, codes = _code_ctx(v)
+    v.trigger(0, v.delegate.hit(rect, item, codes[0][2].center()))
+    assert v.delegate.copy_label(0, 0) == "已复制 ✓"
+    assert v.delegate.copy_label(0, 1) == "复制"  # 按 行+块 区分
+    qtbot.waitUntil(lambda: v.delegate.copy_label(0, 0) == "复制", timeout=1000)
+
+
+def test_collapsed_fade_painted(qtbot):
+    v = ChatView()
+    qtbot.addWidget(v)
+    v.resize(700, 900)
+    v.chat_model.set_messages([("assistant", LONG)])
+    v.show()
+    qtbot.waitExposed(v)
+    _item, _rect, codes = _code_ctx(v)
+    info, r, _c, tog = codes[0]
+    assert info.collapsed
+    fade = v.delegate.fade_rect(r)
+    assert fade.height() >= 32 + chat_view.TOGGLE_H - 1 and fade.contains(tog.center())
+    img = v.grab().toImage()
+    bg = img.pixelColor(r.x() + 4, r.top() + 4)  # 代码块底色
+    # 渐隐区中间应已基本是底色，而上方代码行区域不受影响
+    mid = img.pixelColor(r.x() + 200, fade.top() + fade.height() * 3 // 4)
+    assert abs(mid.lightness() - bg.lightness()) <= 6
+
+
+def test_code_metrics_and_spacing(qtbot):
+    c = _DocCache()
+    doc = c.get("段落一\n\n```\nx = 1\n```\n\n之后的段落\n", 500, False)
+    (info,) = c.code_blocks(doc)
+    lay = doc.documentLayout()
+    b = doc.begin()
+    after = None
+    while b.isValid():
+        if b.text() == "x = 1":
+            assert b.blockFormat().lineHeight() == chat_view.CODE_LINE_H
+            assert b.begin().fragment().charFormat().font().pixelSize() == 12
+        if b.text() == "之后的段落":
+            after = lay.blockBoundingRect(b)
+        b = b.next()
+    assert info.rect.height() == chat_view.CODE_LINE_H + 2 * 12
+    assert after is not None and int(after.top()) - info.rect.bottom() - 1 in range(11, 14)
+
+
+def test_table_row_height_and_padding(qtbot):
+    doc = _DocCache().get("| a | b |\n|---|---|\n| 1 | 2 |\n", 400, False)
+    (t,) = _tables(doc)
+    cf = t.cellAt(1, 0).format().toTableCellFormat()
+    assert cf.leftPadding() == 12 and cf.rightPadding() == 12
+    lay = doc.documentLayout()
+    r0 = lay.blockBoundingRect(t.cellAt(0, 0).firstCursorPosition().block())
+    r1 = lay.blockBoundingRect(t.cellAt(1, 0).firstCursorPosition().block())
+    assert abs((r1.top() - r0.top()) - 28) <= 1

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.resources import files
 
@@ -32,6 +33,7 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QGuiApplication,
+    QLinearGradient,
     QMouseEvent,
     QPainter,
     QPalette,
@@ -70,6 +72,7 @@ _FALLBACK = {
         "subtle": "#F3F3F2",
         "control": "#F0F0EF",
         "active": "#E9E9E8",
+        "success": "#2E8B57",
     },
     True: {
         "text": "#ECECEA",
@@ -79,6 +82,7 @@ _FALLBACK = {
         "subtle": "#262625",
         "control": "#30302F",
         "active": "#3A3A39",
+        "success": "#5CC28A",
     },
 }
 
@@ -100,6 +104,7 @@ def _load_theme() -> dict[bool, dict[str, str]]:
 
 
 THEME = _load_theme()
+_FIXED_LH = 2  # QTextBlockFormat.LineHeightTypes.FixedHeight
 
 _FENCE_RE = re.compile(r"^(?P<ind> {0,3})(?P<f>`{3,}|~{3,})(?P<info>[^\n]*)$")
 
@@ -320,9 +325,14 @@ class CodeBlockInfo:
         return self.total_lines > CODE_COLLAPSE_LINES
 
 
-CODE_PAD = 10  # 代码块左右内边距
-CODE_VPAD = 8  # 代码块上下内边距
-TOGGLE_H = 22  # “展开 N 行”一栏高度
+CODE_PAD = 12  # 代码块左右内边距
+CODE_VPAD = 12  # 代码块上下内边距
+CODE_FONT_PX = 12
+CODE_LINE_H = 20
+TOGGLE_H = 24  # “展开 N 行”一栏高度（叠在渐隐区上）
+FADE_H = 32  # 折叠代码块底部渐隐高度
+GAP = 12  # 段落 / 表格 / 代码块之间的统一间距
+COPIED_MS = 1500
 
 
 def style_markdown(doc: QTextDocument, dark: bool) -> None:
@@ -339,17 +349,30 @@ def style_markdown(doc: QTextDocument, dark: bool) -> None:
                 tf.setBorder(0)
                 tf.setBorderStyle(QTextFrameFormat.BorderStyle.BorderStyle_None)
                 tf.setCellSpacing(0)
-                tf.setCellPadding(6)
+                tf.setCellPadding(0)
                 tf.setBorderCollapse(True)
                 tf.setWidth(QTextLength(QTextLength.Type.VariableLength, 0))
-                tf.setTopMargin(4)
-                tf.setBottomMargin(8)
+                tf.setTopMargin(GAP)
+                tf.setBottomMargin(GAP)
                 child.setFormat(tf)
-                for c in range(child.columns()):
-                    cell = child.cellAt(0, c)
-                    cf = cell.format()
-                    cf.setBackground(QColor(t["subtle"]))
-                    cell.setFormat(cf)
+                for r in range(child.rows()):
+                    for c in range(child.columns()):
+                        cell = child.cellAt(r, c)
+                        tcf = cell.format().toTableCellFormat()
+                        tcf.setLeftPadding(12)
+                        tcf.setRightPadding(12)
+                        tcf.setTopPadding(4)
+                        tcf.setBottomPadding(4)
+                        if r == 0:
+                            tcf.setBackground(QColor(t["subtle"]))
+                        cell.setFormat(tcf)
+                        # 行高 28 = 4 + 20 + 4
+                        cc = cell.firstCursorPosition()
+                        bf = cc.blockFormat()
+                        bf.setLineHeight(20, _FIXED_LH)
+                        bf.setTopMargin(0)
+                        bf.setBottomMargin(0)
+                        cc.setBlockFormat(bf)
     block = doc.begin()
     cur = QTextCursor(doc)
     code_bg = QColor(t["control"])
@@ -364,8 +387,20 @@ def style_markdown(doc: QTextDocument, dark: bool) -> None:
             nf.clearBackground()
             nf.setLeftMargin(CODE_PAD)
             nf.setRightMargin(CODE_PAD)
+            nf.setTopMargin(0)
+            nf.setBottomMargin(0)
+            nf.setLineHeight(CODE_LINE_H, _FIXED_LH)
             cur.setPosition(block.position())
             cur.setBlockFormat(nf)
+            cur.setPosition(block.position() + block.length() - 1, QTextCursor.MoveMode.KeepAnchor)
+            cf = QTextCharFormat()
+            f = QFont()
+            f.setFamilies(["JetBrains Mono", "Menlo", "Consolas", "monospace"])
+            f.setPixelSize(CODE_FONT_PX)
+            cf.setFont(
+                f, QTextCharFormat.FontPropertiesInheritanceBehavior.FontPropertiesSpecifiedOnly
+            )
+            cur.mergeCharFormat(cf)
         elif bf.hasProperty(QTextFormat.Property.BlockQuoteLevel):
             level = int(bf.property(QTextFormat.Property.BlockQuoteLevel) or 1)
             nf = bf
@@ -392,6 +427,21 @@ def style_markdown(doc: QTextDocument, dark: bool) -> None:
                     )
                     cur.mergeCharFormat(cf)
                 it += 1
+        block = block.next()
+
+
+def _uniform_spacing(doc: QTextDocument) -> None:
+    """普通段落上下 margin 统一为 GAP（相邻 margin 折叠，最终间距即 GAP）。"""
+    cur = QTextCursor(doc)
+    block = doc.begin()
+    while block.isValid():
+        bf = block.blockFormat()
+        cur.setPosition(block.position())
+        in_table = cur.currentTable() is not None
+        if not in_table and not bf.hasProperty(QTextFormat.Property.BlockCodeFence):
+            bf.setTopMargin(GAP)
+            bf.setBottomMargin(GAP)
+            cur.setBlockFormat(bf)
         block = block.next()
 
 
@@ -435,14 +485,17 @@ def _split_groups(
 
 
 def _pad_code_blocks(doc: QTextDocument, groups: list[list[int]], collapsed: list[bool]) -> None:
+    # margin 会折叠（取较大值），所以：段落↔代码块 = VPAD+GAP；代码块↔代码块要再加一个 VPAD
+    ends = {g[-1] for g in groups}
     for g, col in zip(groups, collapsed, strict=False):
         for num, extra in ((g[0], "top"), (g[-1], "bottom")):
             b = doc.findBlockByNumber(num)
             bf = b.blockFormat()
             if extra == "top":
-                bf.setTopMargin(2 * CODE_VPAD + 6)  # 相邻块 margin 会折叠，留出间隙
+                adj = (num - 1) in ends
+                bf.setTopMargin(CODE_VPAD + GAP + (CODE_VPAD if adj else 0))
             else:
-                bf.setBottomMargin(CODE_VPAD + 6 + (TOGGLE_H if col else 0))
+                bf.setBottomMargin(CODE_VPAD + GAP + (TOGGLE_H if col else 0))
             c = QTextCursor(b)
             c.setBlockFormat(bf)
 
@@ -478,6 +531,7 @@ class _DocCache:
                 doc.setMarkdown(collapse_source(text, expanded))
                 highlight_code_blocks(doc, dark)
                 style_markdown(doc, dark)
+                _uniform_spacing(doc)
                 groups = _split_groups(_code_groups(doc), fences, expanded)
                 infos = []
                 for i, (_s, _e, code) in enumerate(fences[: len(groups)]):
@@ -492,7 +546,7 @@ class _DocCache:
                     r0 = lay.blockBoundingRect(b0)
                     r1 = lay.blockBoundingRect(b1)
                     top = int(r0.top()) - CODE_VPAD
-                    bottom = int(r1.bottom()) + CODE_VPAD
+                    bottom = int(r1.top()) + CODE_LINE_H + CODE_VPAD + (TOGGLE_H if col else 0)
                     rect = QRect(0, top, width, max(1, bottom - top))
                     blocks.append(CodeBlockInfo(i, rect, code, n, col))
             self._d[key] = doc
@@ -518,6 +572,36 @@ class ChatDelegate(QStyledItemDelegate):
         self.dark = False
         self.hover_pos: QPoint | None = None  # 视图坐标，用于代码块悬停“复制”
         self.shadow_opacity = 0.55  # 用户气泡阴影保持很淡
+        # (row, 代码块下标) -> 计时器；存在即显示“已复制 ✓”
+        self.copied: dict[tuple[int, int], QTimer] = {}
+        self.copiedChanged_cb: list[Callable[[int], None]] = []  # 视图注册刷新回调
+
+    def mark_copied(self, row: int, block: int) -> None:
+        key = (row, block)
+        old = self.copied.pop(key, None)
+        if old is not None:
+            old.stop()
+            old.deleteLater()
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(COPIED_MS)
+        timer.timeout.connect(lambda: self._unmark(key))
+        self.copied[key] = timer
+        timer.start()
+        self._notify(row)
+
+    def _unmark(self, key: tuple[int, int]) -> None:
+        t = self.copied.pop(key, None)
+        if t is not None:
+            t.deleteLater()
+        self._notify(key[0])
+
+    def _notify(self, row: int) -> None:
+        for cb in self.copiedChanged_cb:
+            cb(row)
+
+    def copy_label(self, row: int, block: int) -> str:
+        return "已复制 ✓" if (row, block) in self.copied else "复制"
 
     # 布局
     def _column(self, rect: QRect) -> QRect:
@@ -542,12 +626,20 @@ class ChatDelegate(QStyledItemDelegate):
         out = []
         for info in self.cache.code_blocks(doc):
             r = info.rect.translated(ox, oy)
-            copy = QRect(r.right() - 44, r.top() + 4, 40, 20)
-            tog = QRect(r.x(), r.bottom() + 1, r.width(), TOGGLE_H) if info.collapsible else QRect()
-            if info.collapsible and not info.collapsed:
-                tog = QRect(r.right() - 92, r.top() + 4, 44, 20)
+            copy = QRect(r.right() - 68, r.top() + 4, 64, 20)
+            tog = QRect()
+            if info.collapsed:
+                tog = QRect(r.x(), r.bottom() - TOGGLE_H + 1, r.width(), TOGGLE_H)
+            elif info.collapsible:
+                tog = QRect(r.right() - 116, r.top() + 4, 44, 20)
             out.append((info, r, copy, tog))
         return out
+
+    @staticmethod
+    def fade_rect(code_rect: QRect) -> QRect:
+        """折叠代码块底部渐隐区：最后 TOGGLE_H（标签栏）+ FADE_H。"""
+        h = FADE_H + TOGGLE_H
+        return QRect(code_rect.x(), code_rect.bottom() - h + 1, code_rect.width(), h)
 
     def sizeHint(
         self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex
@@ -615,10 +707,10 @@ class ChatDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(bubble, 12, 12)
         codes = self._code_rects(item, bubble, doc)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(t["control"] if item.role == "user" else t["subtle"]))
-        for info, r, _c, _t in codes:
-            full = r.adjusted(0, 0, 0, TOGGLE_H if info.collapsed else 0)
-            painter.drawRoundedRect(full, 8, 8)
+        code_bg = QColor(t["control"] if item.role == "user" else t["subtle"])
+        painter.setBrush(code_bg)
+        for _info, r, _c, _t in codes:
+            painter.drawRoundedRect(r, 8, 8)
         painter.save()
         painter.translate(bubble.x() + PAD, bubble.y() + PAD)
         ctx = QAbstractTextDocumentLayout.PaintContext()
@@ -630,13 +722,31 @@ class ChatDelegate(QStyledItemDelegate):
         painter.setFont(small)
         for info, r, copy, tog in codes:
             if info.collapsed:
+                # 底部渐隐：透明 → 代码块底色，“展开 N 行”叠在上面
+                fade = self.fade_rect(r)
+                grad = QLinearGradient(0, fade.top(), 0, fade.bottom())
+                clear = QColor(code_bg)
+                clear.setAlpha(0)
+                grad.setColorAt(0.0, clear)
+                grad.setColorAt(0.55, code_bg)
+                grad.setColorAt(1.0, code_bg)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(grad))
+                painter.drawRoundedRect(fade, 8, 8)
                 painter.setPen(QColor(t["text2"]))
                 n = info.total_lines - CODE_COLLAPSE_LINES
                 painter.drawText(tog, Qt.AlignmentFlag.AlignCenter, f"展开 {n} 行")
             hovered = self.hover_pos is not None and r.contains(self.hover_pos)
+            done = (index.row(), info.index) in self.copied
+            align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            if done:
+                painter.setPen(QColor(t["success"]))
+                painter.drawText(copy, align, "已复制 ✓")
+            elif hovered and not item.streaming:
+                painter.setPen(QColor(t["text3"]))
+                painter.drawText(copy, align, "复制")
             if hovered and not item.streaming:
                 painter.setPen(QColor(t["text3"]))
-                painter.drawText(copy, Qt.AlignmentFlag.AlignCenter, "复制")
                 if info.collapsible and not info.collapsed:
                     painter.drawText(tog, Qt.AlignmentFlag.AlignCenter, "收起")
         painter.restore()
@@ -679,6 +789,11 @@ class ChatView(QListView):
         self.setModel(self.chat_model)
         self.delegate = ChatDelegate(self)
         self.setItemDelegate(self.delegate)
+        self.delegate.copiedChanged_cb.append(
+            lambda r: (
+                self.update(self.chat_model.index(r)) if r < self.chat_model.rowCount() else None
+            )
+        )
         self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -742,6 +857,7 @@ class ChatView(QListView):
             fences = parse_code_fences(item.text)
             if idx < len(fences):
                 QGuiApplication.clipboard().setText(fences[idx][2])
+                self.delegate.mark_copied(row, idx)
         elif action.startswith("code_toggle:"):
             self.chat_model.toggle_code(row, int(action.split(":", 1)[1]))
         elif action == "prev":

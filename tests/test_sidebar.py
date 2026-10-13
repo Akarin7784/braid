@@ -157,7 +157,9 @@ def test_selected_has_background(bar, qtbot):
     bar.select(bar.sessions[0].id)
     r = bar.list.visualItemRect(bar.list.currentItem())
     img = bar.list.viewport().grab().toImage()
-    px = img.pixelColor(r.left() + 5, r.center().y())
+    # grab() 返回设备像素，坐标要乘 DPR；取行中心，避开圆角与内缩
+    dpr = img.devicePixelRatio()
+    px = img.pixelColor(int(r.center().x() * dpr), int(r.center().y() * dpr))
     assert px == QColor(SELECTED_BG[False])
 
 

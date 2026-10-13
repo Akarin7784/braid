@@ -155,3 +155,21 @@ def test_logo_recolour_keeps_per_stroke_opacity(win, dark):
     assert len(alphas) >= 3
     assert any(4 <= b <= 5 for b in alphas)  # 0.55 那股（约 140）
     assert any(2 <= b <= 3 for b in alphas)  # 0.3 那股（约 77）
+
+
+def test_model_menu_no_row_highlighted_on_open(win, qtbot):
+    """打开菜单时没有任何行处于 active（悬停）状态：当前模型只打勾、不带灰底。"""
+    from PySide6.QtCore import QTimer
+
+    menu = win.composer.model_menu
+    seen: list[object] = []
+
+    def check() -> None:
+        seen.append((menu.isVisible(), menu.activeAction()))
+        menu.close()
+
+    QTimer.singleShot(50, check)
+    win.composer.open_model_menu()  # 与快捷键 / 点击模型按钮同一入口
+    qtbot.waitUntil(lambda: bool(seen))
+    assert seen[0] == (True, None)
+    assert win.composer._model_actions["mock-large"].isChecked()

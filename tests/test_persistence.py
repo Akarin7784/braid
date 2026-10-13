@@ -63,3 +63,12 @@ def test_project_id_grouping_and_legacy_file(tmp_path):
     s.set_project("old", None)
     groups = SessionStore(path).grouped()
     assert [(k, [r.id for r in v]) for k, v in groups] == [("p1", ["a", "b"]), (None, ["old"])]
+
+
+def test_qcolor_converts_rrggbbaa():
+    from braid.theme.palette import qcolor, tokens
+
+    c = qcolor("sel")
+    assert tokens(False)["sel"].upper() == "#C9643233"
+    assert (c.red(), c.green(), c.blue(), c.alpha()) == (0xC9, 0x64, 0x32, 0x33)
+    assert qcolor("text").alpha() == 255

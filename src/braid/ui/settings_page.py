@@ -5,12 +5,8 @@
 
 from __future__ import annotations
 
-import json
-from functools import lru_cache
-from importlib.resources import files
-
 from PySide6.QtCore import QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
+from PySide6.QtGui import QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QGraphicsOpacityEffect,
@@ -30,16 +26,11 @@ from braid.core import secrets
 from braid.core.providers import Provider, ProviderStore
 from braid.theme.menu import RoundedMenu, is_dark
 from braid.theme.nine_slice import NineSliceShadow
+from braid.theme.palette import qcolor
 
 SIDE_W, CONTENT_MAX, CONTENT_PAD = 180, 640, 32
 CARD_RADIUS, CARD_PAD, CARD_GAP, FIELD_H = 12, 20, 12, 36
 SAVED_TEXT = "已保存到系统钥匙串"
-
-
-@lru_cache(maxsize=2)
-def _tokens(dark: bool) -> dict[str, str]:
-    data = json.loads((files("braid.theme") / "tokens.json").read_text(encoding="utf-8"))
-    return dict(data["dark" if dark else "light"])
 
 
 def mask_key(key: str | None) -> str:
@@ -104,7 +95,7 @@ class KeyField(QWidget):
         self._show_stored()
         if in_keyring:
             self.hint.setText(SAVED_TEXT)
-            self.hint.setStyleSheet(f"color: {_tokens(is_dark())['success']};")
+            self.hint.setStyleSheet(f"color: {qcolor('success', is_dark()).name()};")
             self._fx.setOpacity(1.0)
             self._fade.start()
         self.saved.emit(in_keyring)
@@ -186,7 +177,7 @@ class ProviderCard(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         NineSliceShadow.get("e1", dark).paint(p, self.rect())
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(_tokens(dark)["surface"]))
+        p.setBrush(qcolor("surface", dark))
         p.drawRoundedRect(self.rect(), CARD_RADIUS, CARD_RADIUS)
 
 
@@ -201,13 +192,13 @@ class AddProviderCard(QToolButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self, e: QPaintEvent) -> None:  # noqa: N802
-        t = _tokens(is_dark())
+        dark = is_dark()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(t["text3"]), 1, Qt.PenStyle.DashLine)
+        pen = QPen(qcolor("text3", dark), 1, Qt.PenStyle.DashLine)
         p.setPen(pen)
         p.drawRoundedRect(QRect(self.rect()).adjusted(1, 1, -1, -1), CARD_RADIUS, CARD_RADIUS)
-        p.setPen(QColor(t["text2"]))
+        p.setPen(qcolor("text2", dark))
         p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 

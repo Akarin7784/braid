@@ -169,9 +169,18 @@ class MockBackend(AgentBackend):
 
     def list_models(self) -> list[ModelInfo]:
         return [
-            ModelInfo("mock-large", "Mock Large", "Mock AI", ("low", "medium", "high", "max")),
-            ModelInfo("mock-fast", "Mock Fast", "Mock AI", ("low", "medium")),
-            ModelInfo("local-7b", "Local 7B", "本地模型"),
+            ModelInfo(
+                "mock-large",
+                "Mock Large",
+                "Mock AI",
+                ("low", "medium", "high", "max"),
+                "最强·适合复杂任务",
+                "高",
+            ),
+            ModelInfo(
+                "mock-fast", "Mock Fast", "Mock AI", ("low", "medium"), "快速·适合日常", "中"
+            ),
+            ModelInfo("local-7b", "Local 7B", "本地模型", (), "本机运行·离线可用", "低"),
         ]
 
     def send(

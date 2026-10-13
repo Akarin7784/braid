@@ -18,3 +18,12 @@ def apply_shadow(w: QWidget, level: str, dark: bool = False) -> None:
     fx.setOffset(0, dy)
     fx.setColor(QColor(0, 0, 0, a_dark if dark else a_light))
     w.setGraphicsEffect(fx)
+
+
+def apply_shadow_spec(w: QWidget, blur: int, dy: int, alpha: float) -> None:
+    """按设计稿的 CSS 写法直接给阴影：0 {dy}px {blur}px rgba(0,0,0,{alpha})。"""
+    fx = QGraphicsDropShadowEffect(w)
+    fx.setBlurRadius(blur)
+    fx.setOffset(0, dy)
+    fx.setColor(QColor(0, 0, 0, round(alpha * 255)))
+    w.setGraphicsEffect(fx)

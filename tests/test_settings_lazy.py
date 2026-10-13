@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
 from PySide6.QtGui import QFont, QFontInfo
 from PySide6.QtWidgets import QApplication
 
@@ -369,3 +370,32 @@ def test_slow_keyring_check_does_not_block_ui(qtbot, tmp_path, monkeypatch):
     qtbot.waitUntil(lambda: m.keyring_ok is not None, timeout=5000)
     ticker.stop()
     assert st.text() == KEYRING_OK
+
+
+@pytest.mark.parametrize("exc", [ImportError("no keyring backend"), RuntimeError("boom")])
+def test_keyring_check_exception_resolves_unavailable(qtbot, tmp_path, monkeypatch, exc):
+    """后台检查抛异常（如 PyInstaller 漏了 hiddenimports）时按不可用处理，不会卡在“检查中…”。"""
+    import threading
+
+    from braid.core import secrets
+
+    def broken() -> bool:
+        raise exc
+
+    escaped: list[BaseException] = []
+    monkeypatch.setattr(threading, "excepthook", lambda a: escaped.append(a.exc_value))
+    monkeypatch.setattr(secrets, "keyring_available", broken)
+    page = _settings(qtbot, tmp_path)
+    page.resize(1100, 760)
+    page.show()
+    qtbot.waitExposed(page)
+    m = page.models
+    qtbot.waitUntil(lambda: m.keyring_ok is not None, timeout=5000)
+    assert m.keyring_ok is False
+    assert m.keyring_status.text() == KEYRING_FAIL
+    assert m.keyring_status.property("state") == "fail"
+    assert not m.notice.isHidden()
+    assert m._check_thread is not None
+    m._check_thread.join(timeout=5)
+    assert escaped == []
+    assert m.run_keyring_check() is False  # 同步路径同样不抛

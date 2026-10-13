@@ -412,8 +412,18 @@ class ModelsPage(QWidget):
         if self.keyring_ok is not None or self._check_thread is not None:
             return
         out = self._check_result
+
+        def work() -> None:
+            # 任何异常（如打包漏了 keyring 后端的 ImportError / NoKeyringError）都按不可用处理，
+            # 不能让异常逃出线程，否则状态位会一直停在“检查中…”
+            try:
+                ok = bool(secrets.keyring_available())
+            except Exception:
+                ok = False
+            out.append(ok)
+
         self._check_thread = threading.Thread(
-            target=lambda: out.append(secrets.keyring_available()),
+            target=work,
             name="braid-keyring-check",
             daemon=True,
         )
@@ -431,7 +441,13 @@ class ModelsPage(QWidget):
         """同步检查钥匙串（会导入 keyring），更新状态、提示条，并让各 Key 输入框读取。"""
         self._check_timer.stop()
         self._poll_timer.stop()
-        ok = self._check_result[0] if self._check_result else secrets.keyring_available()
+        if self._check_result:
+            ok = self._check_result[0]
+        else:
+            try:
+                ok = bool(secrets.keyring_available())
+            except Exception:
+                ok = False
         self._apply_keyring_result(ok)
         return ok
 

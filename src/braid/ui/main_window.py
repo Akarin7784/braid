@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QStringListModel, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QEasingCurve, QEvent, QObject, Qt, QVariantAnimation
+from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListView,
     QMainWindow,
     QPushButton,
     QSplitter,
@@ -17,11 +16,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from braid.core.backend import AgentBackend
+from braid.core.backend import AgentBackend, Session
 from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
+from braid.ui.sidebar import Sidebar
+from braid.ui.window_controls import RIGHT_MARGIN, WindowControls
 
 
 class DragArea(QWidget):
@@ -50,18 +51,10 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(900, 560)
 
-        sidebar = QFrame()
-        sidebar.setObjectName("Sidebar")
-        sl = QVBoxLayout(sidebar)
-        sl.setContentsMargins(12, 12, 12, 12)
-        sl.addWidget(DragArea(minimumHeight=24))
-        sl.addWidget(_btn("＋ 新对话", "secondary"))
-        self.session_list = QListView()
-        self.session_list.setObjectName("SessionList")
-        self.session_list.setModel(QStringListModel([s.title for s in backend.list_sessions()]))
-        sl.addWidget(self.session_list)
-        self._sessions = backend.list_sessions()
-        self.session_list.clicked.connect(lambda i: self._open(i.row()))
+        self.sidebar = sidebar = Sidebar(backend)
+        sidebar.layout().insertWidget(0, DragArea(minimumHeight=24))  # type: ignore[union-attr]
+        sidebar.sessionSelected.connect(self._open_session)
+        self._sessions = sidebar.sessions
 
         chat = QFrame()
         chat.setObjectName("ChatArea")
@@ -77,15 +70,13 @@ class MainWindow(QMainWindow):
         self.title.setObjectName("SessionTitle")
         top.addWidget(self.title)
         top.addWidget(DragArea(minimumHeight=24), 1)
-        for t, slot in (
-            ("\u2212", self.showMinimized),
-            ("\u25a1", self._toggle_max),
-            ("\u2715", self.close),
-        ):
-            b = _btn(t, "ghost")
-            b.setFixedSize(32, 28)
-            b.clicked.connect(slot)
-            top.addWidget(b)
+        self.panel_toggle = _btn("\u25e8", "ghost")
+        self.panel_toggle.setObjectName("PanelToggle")
+        self.panel_toggle.setFixedSize(32, 28)
+        self.panel_toggle.clicked.connect(lambda: self.set_panel_open(not self.panel_open()))
+        top.addWidget(self.panel_toggle)
+        # 给浮层窗口控制按钮留位置（收起侧面板时按钮在这里）
+        top.addSpacing(WindowControls.reserved_width() + 16 - 24)
         cl.addLayout(top)
         self.chat_view = ChatView()
         cl.addWidget(self.chat_view, 1)
@@ -100,15 +91,21 @@ class MainWindow(QMainWindow):
         self.chat.editRequested.connect(composer.set_text)
         cl.addWidget(composer)
 
-        panel = QFrame()
+        self.panel = panel = QFrame()
         panel.setObjectName("SidePanel")
         pl = QVBoxLayout(panel)
         pl.setContentsMargins(12, 12, 12, 12)
-        tabs = QTabBar()
+        self.panel_tabs = tabs = QTabBar()
         tabs.setObjectName("PanelTabs")
+        tabs.setDrawBase(False)
         for t in ("浏览器", "Git", "Diff", "终端", "任务"):
             tabs.addTab(t)
-        pl.addWidget(tabs)
+        tab_row = QHBoxLayout()
+        tab_row.addWidget(tabs)
+        tab_row.addWidget(DragArea(minimumHeight=24), 1)
+        # 最后一个标签与按钮至少 16px；面板右内边距 12px 已计入
+        tab_row.addSpacing(WindowControls.reserved_width() + 16 - 12)
+        pl.addLayout(tab_row)
         pl.addWidget(QLabel("面板内容（模拟）", alignment=Qt.AlignmentFlag.AlignCenter), 1)
 
         split = QSplitter(Qt.Orientation.Horizontal, handleWidth=4, childrenCollapsible=False)
@@ -116,7 +113,20 @@ class MainWindow(QMainWindow):
             split.addWidget(w)
         split.setSizes([240, 620, 420])
         split.setStretchFactor(1, 1)
+        self.splitter = split
         self.setCentralWidget(split)
+        self._panel_width = 420
+
+        # 唯一一份窗口控制按钮：主窗口的浮层子控件
+        self.controls = WindowControls(self)
+        self.controls.minimizeRequested.connect(self.showMinimized)
+        self.controls.maximizeRequested.connect(self._toggle_max)
+        self.controls.closeRequested.connect(self.close)
+        for w in (panel, chat, split):
+            w.installEventFilter(self)
+        split.splitterMoved.connect(lambda *_: self._place_controls())
+        self._anim: QVariantAnimation | None = None
+        self._place_controls()
         try:
             from braid.theme.shadows import apply_shadow
 
@@ -125,10 +135,12 @@ class MainWindow(QMainWindow):
             pass
 
         if self._sessions:
-            self._open(0)
+            sidebar.select(self._sessions[0].id)
 
     def _open(self, row: int) -> None:
-        s = self._sessions[row]
+        self.sidebar.select(self._sessions[row].id)
+
+    def _open_session(self, s: Session) -> None:
         self.title.setText(s.title)
         self.chat.open_session(s.id)
         self._current = s
@@ -155,3 +167,68 @@ class MainWindow(QMainWindow):
 
     def _toggle_max(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()
+
+    # ---- 侧面板与浮层按钮 ----
+    def panel_open(self) -> bool:
+        return self.panel.isVisible() and self.panel.width() > 0
+
+    def set_panel_open(self, open_: bool, animate: bool = True) -> None:
+        if self._anim:
+            self._anim.stop()
+            self._anim = None
+        sizes = self.splitter.sizes()
+        if not open_ and self.panel.isVisible() and sizes[2] > 0:
+            self._panel_width = max(sizes[2], 240)
+        target = self._panel_width if open_ else 0
+        start = sizes[2] if self.panel.isVisible() else 0
+        self.panel.setVisible(True)
+
+        def step(v: object) -> None:
+            cur = self.splitter.sizes()
+            total = sum(cur)
+            w = int(v)  # type: ignore[call-overload]
+            self.splitter.setSizes([cur[0], max(total - cur[0] - w, 1), w])
+            self._place_controls()
+
+        def done() -> None:
+            if not open_:
+                self.panel.setVisible(False)
+            self._place_controls()
+
+        if not animate:
+            step(target)
+            done()
+            return
+        a = QVariantAnimation(self, startValue=start, endValue=target, duration=180)
+        a.setEasingCurve(QEasingCurve.Type.OutCubic)
+        a.valueChanged.connect(step)
+        a.finished.connect(done)
+        self._anim = a
+        a.start()
+
+    def _place_controls(self) -> None:
+        c = getattr(self, "controls", None)
+        if c is None:
+            return
+        x = self.width() - RIGHT_MARGIN - c.width()
+        if self.panel.isVisible() and self.panel.width() > c.width() + RIGHT_MARGIN:
+            tb = self.panel_tabs
+            cy = tb.mapTo(self, tb.rect().center()).y()
+        else:
+            t = self.title
+            cy = t.mapTo(self, t.rect().center()).y()
+        c.move(x, int(cy - c.height() / 2 + 0.5))
+        c.raise_()
+
+    def eventFilter(self, obj: QObject, e: QEvent) -> bool:
+        if e.type() in (QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.Hide, QEvent.Type.Move):
+            self._place_controls()
+        return super().eventFilter(obj, e)
+
+    def resizeEvent(self, e: QResizeEvent) -> None:
+        super().resizeEvent(e)
+        self._place_controls()
+
+    def showEvent(self, e: QShowEvent) -> None:
+        super().showEvent(e)
+        self._place_controls()

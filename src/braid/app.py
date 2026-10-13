@@ -18,6 +18,7 @@ def main() -> int:
     app.setProperty("braidDark", theme == "dark")
     app.setStyleSheet(_qss(theme))
     w = MainWindow(MockBackend())
+    w.chat_view.set_dark(theme == "dark")
     w.show()
     tray = Tray(w)
     tray.show()

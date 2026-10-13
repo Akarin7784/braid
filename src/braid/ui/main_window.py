@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import QStringListModel, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -14,14 +13,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QTabBar,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from braid.core.backend import AgentBackend
+from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
+from braid.ui.composer import Composer
 
 
 class DragArea(QWidget):
@@ -89,29 +89,15 @@ class MainWindow(QMainWindow):
         cl.addLayout(top)
         self.chat_view = ChatView()
         cl.addWidget(self.chat_view, 1)
-        composer = QFrame()
-        composer.setObjectName("Composer")
-        col = QVBoxLayout(composer)
-        self.input = QTextEdit(placeholderText="输入消息，/ 唤起命令…")
-        self.input.setFixedHeight(72)
-        self.input.setObjectName("ComposerInput")
-        col.addWidget(self.input)
-        bar = QHBoxLayout()
-        bar.addWidget(_btn("📎", "ghost"))
-        self.model_box = QComboBox()
-        self.model_box.addItems([m.name for m in backend.list_models()])
-        bar.addWidget(self.model_box)
-        bar.addStretch(1)
-        self.send_btn = _btn("\u2191", "primary")
-        self.send_btn.setObjectName("SendButton")
-        self.send_btn.setFixedSize(34, 34)
-        self.send_btn.setToolTip("发送")
-        bar.addWidget(self.send_btn)
-        self.chat = ChatController(backend, self.chat_view, backend.list_models()[0].id)
-        self.send_btn.clicked.connect(self._send_or_stop)
-        self.chat.busyChanged.connect(lambda b: self.send_btn.setText("\u25a0" if b else "\u2191"))
-        self.chat.editRequested.connect(self.input.setPlainText)
-        col.addLayout(bar)
+        models = backend.list_models()
+        self.composer = composer = Composer(models)
+        self.chat = ChatController(backend, self.chat_view, composer.model_id)
+        composer.submitted.connect(self._submit)
+        composer.stopRequested.connect(self.chat.stop)
+        composer.commandTriggered.connect(self._command)
+        self.chat.busyChanged.connect(composer.set_busy)
+        composer.selectionChanged.connect(self._remember_selection)
+        self.chat.editRequested.connect(composer.set_text)
         cl.addWidget(composer)
 
         panel = QFrame()
@@ -145,13 +131,27 @@ class MainWindow(QMainWindow):
         s = self._sessions[row]
         self.title.setText(s.title)
         self.chat.open_session(s.id)
+        self._current = s
+        self.composer.set_selection(
+            s.model_id or settings.default_model, s.reasoning or settings.default_reasoning
+        )
 
-    def _send_or_stop(self) -> None:
-        if self.chat.busy:
-            self.chat.stop()
-            return
-        self.chat.send(self.input.toPlainText())
-        self.input.clear()
+    def _remember_selection(self, model_id: str, reasoning: str) -> None:
+        s = getattr(self, "_current", None)
+        if s is not None:
+            s.model_id, s.reasoning = model_id, reasoning
+
+    def _submit(self, text: str, attachments: list[str]) -> None:
+        self.chat.model_id = self.composer.model_id
+        self.chat.reasoning = self.composer.reasoning
+        if attachments:
+            names = ", ".join(a.rsplit("/", 1)[-1] for a in attachments)
+            text = f"{text}\n\n附件：{names}".strip()
+        self.chat.send(text)
+
+    def _command(self, name: str) -> None:
+        if name == "clear":
+            self.chat_view.chat_model.set_messages([])
 
     def _toggle_max(self) -> None:
         self.showNormal() if self.isMaximized() else self.showMaximized()

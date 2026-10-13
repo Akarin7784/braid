@@ -11,9 +11,16 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from PySide6.QtCore import Property, QMargins, QRect, Qt
+from PySide6.QtCore import Property, QMargins, QRect, QSize, Qt
 from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QPixmap
-from PySide6.QtWidgets import QApplication, QMenu, QToolButton, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QMenu,
+    QStyle,
+    QStyleOptionToolButton,
+    QToolButton,
+    QWidget,
+)
 
 from braid.theme.nine_slice import NineSliceShadow
 
@@ -93,15 +100,41 @@ class ChipButton(QToolButton):
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
 
+    PAD_LEFT = 12
+    GAP = 12
+
+    def _reserved(self) -> int:
+        return self.GAP + self.ARROW + self.ARROW_RIGHT
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        fm = self.fontMetrics()
+        w = self.PAD_LEFT + fm.horizontalAdvance(self.text()) + self._reserved()
+        return QSize(w, max(super().sizeHint().height(), fm.height() + 8))
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return self.sizeHint()
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        super().setText(text)
+        self.updateGeometry()
+
     def paintEvent(self, event: QPaintEvent) -> None:
-        super().paintEvent(event)
+        opt = QStyleOptionToolButton()
+        self.initStyleOption(opt)
+        text = opt.text
+        opt.text = ""
+        p = QPainter(self)
+        self.style().drawComplexControl(QStyle.ComplexControl.CC_ToolButton, opt, p, self)
+        tr = QRect(self.PAD_LEFT, 0, self.width() - self.PAD_LEFT - self._reserved(), self.height())
+        p.setPen(self.palette().color(self.foregroundRole()))
+        p.setFont(self.font())
+        elided = self.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, tr.width())
+        p.drawText(tr, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), elided)
         name = "dark" if is_dark() else "light"
         pm = QPixmap(str(files("braid.assets") / "icons" / f"chevron_down_{name}.png"))
-        if pm.isNull():
-            return
-        s = self.ARROW
-        r = QRect(self.width() - self.ARROW_RIGHT - s, (self.height() - s) // 2, s, s)
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        p.drawPixmap(r, pm)
+        if not pm.isNull():
+            s = self.ARROW
+            r = QRect(self.width() - self.ARROW_RIGHT - s, (self.height() - s) // 2, s, s)
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            p.drawPixmap(r, pm)
         p.end()

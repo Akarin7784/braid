@@ -7,12 +7,10 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from importlib.resources import files
 
 from PySide6.QtCore import (
     QAbstractListModel,
@@ -57,6 +55,7 @@ from PySide6.QtWidgets import (
 )
 
 from braid.theme.nine_slice import NineSliceShadow
+from braid.theme.palette import tokens as palette_tokens
 
 MAX_WIDTH = 680  # 对话列最大宽度（设计偏差 B），居中
 PAD = 12
@@ -65,47 +64,16 @@ THROTTLE_MS = 50  # 每帧约 30ms，更小的间隔只会让排版连着跑；�
 # 与 QSS 中 `*` 文字色、userBubble 底色保持一致（tokens.json）
 CODE_COLLAPSE_LINES = 20
 MONO = "'JetBrains Mono','Menlo','Consolas',monospace"
-_FALLBACK = {
-    False: {
-        "text": "#1F1F1E",
-        "text2": "#6B6B69",
-        "text3": "#9E9E9B",
-        "bubble": "#EFEFEE",
-        "subtle": "#F3F3F2",
-        "control": "#F0F0EF",
-        "active": "#E9E9E8",
-        "success": "#2E8B57",
-    },
-    True: {
-        "text": "#ECECEA",
-        "text2": "#A3A3A0",
-        "text3": "#73736F",
-        "bubble": "#2F2F2E",
-        "subtle": "#262625",
-        "control": "#30302F",
-        "active": "#3A3A39",
-        "success": "#5CC28A",
-    },
-}
 
 
-def _load_theme() -> dict[bool, dict[str, str]]:
-    """颜色取 braid/theme/tokens.json；文件缺失或字段不全时回退到内置值。"""
-    out = {k: dict(v) for k, v in _FALLBACK.items()}
-    try:
-        data = json.loads((files("braid.theme") / "tokens.json").read_text(encoding="utf-8"))
-    except Exception:
-        return out
-    for dark, name in ((False, "light"), (True, "dark")):
-        sect = data.get(name, {}) if isinstance(data, dict) else {}
-        for k in out[dark]:
-            v = sect.get(k)
-            if isinstance(v, str):
-                out[dark][k] = v
-    return out
+class _Theme:
+    """按需读 tokens.json（palette.tokens 带缓存）；主题切换后 cache_clear 即可生效。"""
+
+    def __getitem__(self, dark: bool) -> dict[str, str]:
+        return palette_tokens(dark)
 
 
-THEME = _load_theme()
+THEME = _Theme()
 _FIXED_LH = 2  # QTextBlockFormat.LineHeightTypes.FixedHeight
 
 _FENCE_RE = re.compile(r"^(?P<ind> {0,3})(?P<f>`{3,}|~{3,})(?P<info>[^\n]*)$")

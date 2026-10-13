@@ -38,8 +38,10 @@ def grab_screen(app: QApplication, w: QWidget, name: str) -> None:
 
 
 def model_chip(w: MainWindow) -> ChipButton:
-    chips = w.findChildren(ChipButton)
-    return next((c for c in chips if c.property("role") == "modelChip"), chips[0])
+    chips = [c for c in w.findChildren(ChipButton) if c.property("role") == "modelChip"]
+    if not chips:
+        raise SystemExit("截图失败：找不到模型选择按钮（role=modelChip）")
+    return chips[0]
 
 
 def run(app: QApplication, theme: str) -> None:
@@ -67,22 +69,24 @@ def run(app: QApplication, theme: str) -> None:
     w.grab(r.translated(chip.mapTo(w, QPoint(0, 0)))).save(str(OUT / f"chip_{theme}.png"))
 
     menu = chip.menu()
-    if menu is not None:
-        # xvfb 没有窗口管理器，popup 会立刻被关掉；改为离屏渲染菜单并按弹出位置合成
-        img = w.grab()
-        p = QPainter(img)
-        menu.adjustSize()
-        m_pix = menu.grab()
-        pos = chip.mapTo(w, QPoint(0, 0)) - QPoint(0, m_pix.height() + 6)
-        p.drawPixmap(pos, m_pix)
-        acts = [a for a in menu.actions() if a.menu() is not None]
-        if acts:
-            menu.setActiveAction(acts[0])
-            sub = acts[0].menu()
-            sub.adjustSize()
-            p.drawPixmap(pos + menu.actionGeometry(acts[0]).topRight(), sub.grab())
-        p.end()
-        img.save(str(OUT / f"menu_{theme}.png"))
+    if menu is None:
+        raise SystemExit("截图失败：模型选择按钮没有菜单")
+    # xvfb 没有窗口管理器，popup 会立刻被关掉；改为离屏渲染菜单并按弹出位置合成
+    img = w.grab()
+    p = QPainter(img)
+    menu.adjustSize()
+    m_pix = menu.grab()
+    pos = chip.mapTo(w, QPoint(0, 0)) - QPoint(0, m_pix.height() + 6)
+    p.drawPixmap(pos, m_pix)
+    acts = [a for a in menu.actions() if a.menu() is not None]
+    if not acts:
+        raise SystemExit("截图失败：模型菜单里没有二级菜单")
+    menu.setActiveAction(acts[0])
+    sub = acts[0].menu()
+    sub.adjustSize()
+    p.drawPixmap(pos + menu.actionGeometry(acts[0]).topRight(), sub.grab())
+    p.end()
+    img.save(str(OUT / f"menu_{theme}.png"))
 
     # 侧栏整列：项目分组、选中态和左下角齿轮
     w.sidebar.grab().save(str(OUT / f"sidebar_{theme}.png"))
@@ -100,7 +104,13 @@ def main() -> int:
     app = QApplication(sys.argv)
     for theme in ("light", "dark"):
         run(app, theme)
-    print("\n".join(sorted(p.name for p in OUT.glob("*.png"))))
+    names = ("main_panel_open", "main_panel_closed", "chip", "menu", "sidebar", "settings")
+    want = {f"{n}_{t}.png" for n in names for t in ("light", "dark")}
+    got = {p.name for p in OUT.glob("*.png")}
+    print("\n".join(sorted(got)))
+    if want - got:
+        print(f"截图失败，缺少：{sorted(want - got)}", file=sys.stderr)
+        return 1
     return 0
 
 

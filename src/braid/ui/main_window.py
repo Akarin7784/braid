@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from braid.core.backend import AgentBackend, Session
+from braid.core.session_store import SessionStore
 from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
@@ -56,7 +57,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(900, 560)
 
-        self.sidebar = sidebar = Sidebar(backend)
+        self.sidebar = sidebar = Sidebar(backend, store=SessionStore())
         sidebar.layout().insertWidget(0, DragArea(minimumHeight=24))  # type: ignore[union-attr]
         sidebar.sessionSelected.connect(self._open_session)
         self._sessions = sidebar.sessions

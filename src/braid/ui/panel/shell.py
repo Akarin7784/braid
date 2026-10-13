@@ -344,6 +344,17 @@ class RightPanel(QFrame):
         if self.current_index() >= 0:
             self.stack.setCurrentIndex(self.current_index())
 
+    def set_theme(self, mode: str) -> None:
+        """跟随应用切换深浅色：面板自身与已构建的页面都重设；未建的页面构建时用新主题。"""
+        self.theme_mode = mode
+        self.setStyleSheet(panel_qss(mode))
+        for page in self._pages.values():
+            fn = getattr(page, "set_theme", None)
+            if callable(fn):
+                fn(mode)
+        for w in self.findChildren(QWidget):
+            w.update()
+
     def current_index(self) -> int:
         return self.tab_group.checkedId()
 

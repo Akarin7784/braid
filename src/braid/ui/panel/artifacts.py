@@ -181,6 +181,10 @@ class PreviewCard(QFrame):
             self._render()
             self.modeChanged.emit(mode)
 
+    def set_theme(self, mode: str) -> None:
+        self.theme = mode
+        self._render()
+
     def _render(self) -> None:
         a = self.artifact
         self.body.document().setDefaultFont(QFont())
@@ -282,6 +286,7 @@ class ArtifactsPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setStyleSheet(artifacts_qss(theme))
+        self.theme = theme
         self.cards: list[ArtifactCard] = []  # 顺序同界面，从上到下
         self.selected: Artifact | None = None
         lay = QVBoxLayout(self)
@@ -317,6 +322,13 @@ class ArtifactsPage(QWidget):
             for a in source.list_artifacts():
                 self.add_artifact(a, animate=False)
             source.artifact_added.connect(self.add_artifact)
+
+    def set_theme(self, mode: str) -> None:
+        self.theme = mode
+        self.setStyleSheet(artifacts_qss(mode))
+        self.preview.set_theme(mode)
+        for w in self.findChildren(QWidget):
+            w.update()
 
     def _update_count(self) -> None:
         n = len(self.cards)

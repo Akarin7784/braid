@@ -72,15 +72,21 @@ def run(app: QApplication, theme: str) -> None:
 
     menu = chip.menu()
     if menu is not None:
-        menu.popup(chip.mapToGlobal(QPoint(0, 0)) - QPoint(0, menu.sizeHint().height() + 6))
-        settle(app)
+        # xvfb 没有窗口管理器，popup 会立刻被关掉；改为离屏渲染菜单并按弹出位置合成
+        img = w.grab()
+        p = QPainter(img)
+        menu.adjustSize()
+        m_pix = menu.grab()
+        pos = chip.mapTo(w, QPoint(0, 0)) - QPoint(0, m_pix.height() + 6)
+        p.drawPixmap(pos, m_pix)
         acts = [a for a in menu.actions() if a.menu() is not None]
         if acts:
             menu.setActiveAction(acts[0])
-            acts[0].menu().popup(menu.mapToGlobal(menu.actionGeometry(acts[0]).topRight()))
-            settle(app)
-        grab_screen(app, w, f"menu_{theme}.png")
-        menu.close()
+            sub = acts[0].menu()
+            sub.adjustSize()
+            p.drawPixmap(pos + menu.actionGeometry(acts[0]).topRight(), sub.grab())
+        p.end()
+        img.save(str(OUT / f"menu_{theme}.png"))
     w.close()
 
 

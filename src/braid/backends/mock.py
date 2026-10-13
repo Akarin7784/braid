@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import copy
 import itertools
 from collections.abc import Iterator
+from typing import Any
 
-from braid.core.backend import AgentBackend, Message, ModelInfo, Session, StreamChunk
+from braid.core.backend import (
+    CONFIG_SECTIONS,
+    AgentBackend,
+    ConnectionResult,
+    Message,
+    ModelInfo,
+    Session,
+    StreamChunk,
+)
 
 DEMO_REPLY = """好的，先看一下现在的实现。**主要问题**有两点：
 
@@ -21,8 +31,42 @@ def login(user: str, pwd: str, timeout: float = 5.0) -> bool:
 """
 
 
+def default_config() -> dict[str, dict[str, Any]]:
+    """各分区的演示数据，字段参考 opencode 的 config（model / small_model / permission …）。"""
+    return {
+        "models": {
+            "model": "mock-large",
+            "small_model": "mock-fast",
+            "providers": {},  # provider_id -> {"timeout": 秒, "chunk_timeout": 秒}
+        },
+        "permissions": {
+            "edit": "ask",
+            "bash": "ask",
+            "webfetch": "allow",
+            "bash_rules": [
+                {"pattern": "rm -rf *", "action": "deny"},
+                {"pattern": "git status", "action": "allow"},
+            ],
+        },
+        "general": {
+            "theme": "light",  # system / light / dark
+            "language": "zh-CN",
+            "font_size": 14,
+            "autoupdate": "notify",  # auto / notify / off
+            "shell": "/bin/bash",
+        },
+        "agents": {"default_agent": "build", "agents": ["build", "plan"]},
+        "mcp": {"servers": {}},
+        "rules": {"instructions": ["AGENTS.md"]},
+        "keybinds": {"leader": "ctrl+x", "send": "enter", "newline": "shift+enter"},
+        "advanced": {"share": "manual", "snapshot": True, "log_level": "info"},
+    }
+
+
 class MockBackend(AgentBackend):
     def __init__(self) -> None:
+        self._config = default_config()
+        assert tuple(self._config) == CONFIG_SECTIONS
         self._ids = itertools.count(1)
         self._sessions: dict[str, Session] = {}
         for t, proj in [
@@ -71,3 +115,18 @@ class MockBackend(AgentBackend):
 
     def respond_permission(self, request_id, decision) -> None:
         pass
+
+    def get_config(self, section: str) -> dict[str, Any]:
+        return copy.deepcopy(self._config[section])
+
+    def set_config(self, section: str, values: dict[str, Any]) -> None:
+        if section not in self._config:
+            raise KeyError(section)
+        self._config[section].update(copy.deepcopy(values))
+        self.config_changed.emit(section)
+
+    def test_connection(self, provider_id: str, base_url: str) -> ConnectionResult:
+        """演示：endpoint 以 http 开头算成功，否则失败。"""
+        if base_url.strip().startswith(("http://", "https://")):
+            return ConnectionResult(True, "已连接 · 320ms")
+        return ConnectionResult(False, "连接失败 · 端点无效")

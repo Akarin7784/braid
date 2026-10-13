@@ -126,6 +126,23 @@ QToolButton[role="windowControl"][kind="close"]:hover, QToolButton[role="windowC
 #settingsSubtitle { font-size: 13px; color: ${text2}; }
 #settingsEmpty { font-size: 13px; color: ${text3}; }
 #providerName { font-size: 14px; font-weight: 600; }
+#settingLabel { color: ${text}; font-weight: normal; }
+#settingCardTitle { color: ${text2}; font-size: 12px; }
+#fieldLabel { color: ${text2}; font-size: 12px; }
+#fieldUnit { color: ${text3}; font-size: 12px; }
+QComboBox#settingsCombo { padding-right: 28px; }
+QComboBox#settingsCombo::drop-down { width: 0; border: none; }
+QComboBox#settingsCombo::down-arrow { image: none; width: 0; height: 0; }
+QMenu[role="comboPopup"]::item { padding: 7px 16px 7px 12px; min-width: 0; }
+QMenu[role="comboPopup"]::item:checked { background: ${row_sel}; font-weight: normal; }
+QMenu[role="comboPopup"]::item:selected { background: ${hover}; }
+QMenu[role="comboPopup"]::indicator { width: 0; height: 0; }
+QToolButton#textButton { background: transparent; color: ${text2}; border: none; padding: 4px 6px; border-radius: 6px; }
+QToolButton#textButton:hover { background: ${hover}; color: ${text}; }
+QToolButton#textButton:disabled { color: ${text3}; }
+#testResult { font-size: 12px; }
+QLineEdit#settingsNumber, QComboBox#settingsCombo { background: ${control}; border: 1.5px solid transparent; border-radius: 8px; padding: 2px 8px; min-height: 24px; }
+QLineEdit#settingsNumber:focus, QComboBox#settingsCombo:focus { border-color: ${brand}; }
 QLineEdit#settingsField { background: ${control}; border: none; border-radius: 10px; padding: 0 12px; min-height: 36px; }
 QLineEdit#settingsField:focus { background: ${surface}; border: 1px solid ${sel}; }
 #keyringWarning { background: ${warning_bg}; color: ${warning}; border-radius: 8px; padding: 8px 12px; }

@@ -366,7 +366,7 @@ class MainWindow(QMainWindow):
             s.model_id or settings.default_model, s.reasoning or settings.default_reasoning
         )
 
-    def _remember_selection(self, model_id: str, reasoning: str) -> None:
+    def _remember_selection(self, model_id: str, reasoning: str | None) -> None:
         s = getattr(self, "_current", None)
         if s is not None:
             s.model_id, s.reasoning = model_id, reasoning

@@ -220,7 +220,7 @@ def test_no_effort_model_has_no_submenu_and_chip_shows_name_only(qtbot):
     assert mini.menu() is None
     assert not any(k[0] == "z2" for k in c._level_actions)
     c.set_selection("z2", "e1")
-    assert c.reasoning == ""
+    assert c.reasoning is None
     assert c.model_chip.text() == "Zeta Mini"
 
 
@@ -297,3 +297,83 @@ def test_effort_items_use_same_font_as_model_names(win):
         assert rule + "font-size: 13px; font-weight: normal; }" in load_qss("light")
     finally:
         app.setStyleSheet("")
+
+
+def test_tier_tags_right_aligned_across_rows(win):
+    m = win.composer.model_menu
+    acts = win.composer._model_actions
+    assert acts["local-7b"].menu() is None and acts["mock-large"].menu() is not None
+    rights = {m.tag_right(a) for a in acts.values()}
+    assert len(rights) == 1
+
+
+def _ink(img, rect):
+    total = 0
+    for x in range(rect.left(), rect.right()):
+        for y in range(rect.top(), rect.bottom()):
+            v = 255 - img.pixelColor(x, y).red()
+            if v > 40:
+                total += v
+    return total
+
+
+def test_effort_label_renders_regular_400(win):
+    """子菜单档位文字按常规字重（400）渲染，中文回退字面也是 Regular，与模型名同一字体。"""
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QColor, QFont, QFontInfo, QImage, QPainter, QTextLayout
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    app.setStyleSheet(load_qss("light"))
+    try:
+        c = win.composer
+        m = c.model_menu
+        sub = c._model_actions["mock-large"].menu()
+        m.ensurePolished()
+        sub.ensurePolished()
+        fm, fs = m.font(), sub.font()
+        assert fs == fm
+        info = QFontInfo(fs)
+        assert info.weight() == 400 and info.styleName() in ("Regular", "")
+        # 实际用到的字面（拉丁 + 中文回退）都是 400
+        lay = QTextLayout("低 Mock", fs)
+        lay.beginLayout()
+        lay.createLine()
+        lay.endLayout()
+        for run in lay.glyphRuns():
+            assert run.rawFont().weight() == 400, run.rawFont().familyName()
+        # 菜单里“低”的笔画墨量与 400 参考一致、明显低于 600
+        sub.popup(QPoint(0, 0))
+        img = sub.grab().toImage()
+        lo = c._level_actions[("mock-large", "low")]
+        g = sub.actionGeometry(lo)
+        got = _ink(img, QRect(g.left() + 40, g.top() + 4, 30, 20))
+
+        def ref(weight):
+            im = QImage(60, 30, QImage.Format.Format_ARGB32)
+            im.fill(QColor("white"))
+            p = QPainter(im)
+            f = QFont(fs)
+            f.setWeight(weight)
+            p.setFont(f)
+            p.setPen(QColor("#1F1F1E"))
+            p.drawText(2, 20, "低")
+            p.end()
+            return _ink(im, QRect(0, 2, 60, 20))
+
+        r400, r600 = ref(QFont.Weight.Normal), ref(QFont.Weight.DemiBold)
+        if img.devicePixelRatio() == 1:
+            assert abs(got - r400) < abs(got - r600)
+        sub.close()
+    finally:
+        app.setStyleSheet("")
+
+
+def test_send_effort_none_means_model_default(win):
+    c = win.composer
+    c.set_selection("local-7b", "low")
+    assert c.reasoning is None
+    sid = win.backend.list_sessions()[0].id if hasattr(win.backend, "list_sessions") else None
+    if sid is not None:
+        chunks = list(win.backend.send(sid, "hi", "local-7b", None))
+        assert chunks[-1].kind == "done"

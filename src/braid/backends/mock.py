@@ -201,7 +201,7 @@ class MockBackend(AgentBackend):
         ]
 
     def send(
-        self, session_id, text, model, reasoning="medium", attachments=None
+        self, session_id, text, model, reasoning=None, attachments=None
     ) -> Iterator[StreamChunk]:
         s = self._sessions[session_id]
         s.messages.append(Message("user", text))

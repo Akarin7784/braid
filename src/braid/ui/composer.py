@@ -150,7 +150,7 @@ class Composer(QFrame):
     """发出 `submitted(text, attachments)`、`stopRequested()`、`commandTriggered(name)`。"""
 
     submitted = Signal(str, list)
-    selectionChanged = Signal(str, str)  # model_id, reasoning（不支持时为空串）
+    selectionChanged = Signal(str, object)  # model_id, reasoning: str | None（None=模型默认）
     stopRequested = Signal()
     commandTriggered = Signal(str)
 
@@ -167,7 +167,7 @@ class Composer(QFrame):
         self.busy = False
         self.models = {m.id: m for m in models}
         self.model_id = ""
-        self.reasoning = ""
+        self.reasoning: str | None = None
         self.permission = "ask"
 
         col = QVBoxLayout(self)
@@ -269,7 +269,7 @@ class Composer(QFrame):
                         self._level_actions[(m.id, eff.id)] = la
                 else:
                     act = QAction(m.name, menu)
-                    act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, ""))
+                    act.triggered.connect(lambda _=False, mid=m.id: self.set_selection(mid, None))
                     menu.addAction(act)
                 act.setCheckable(True)
                 ModelMenu.describe(act, m.description, m.tier)
@@ -281,10 +281,11 @@ class Composer(QFrame):
         if m is None:
             return
         levels = m.reasoning_levels
+        lv: str | None
         if not levels:
-            lv = ""
+            lv = None  # 模型不支持推理强度：用模型默认
         elif reasoning in levels:
-            lv = reasoning or ""
+            lv = reasoning
         elif settings.default_reasoning in levels:
             lv = settings.default_reasoning
         else:
@@ -294,7 +295,7 @@ class Composer(QFrame):
             a.setChecked(mid == m.id)  # 选中只靠打勾，不加粗、不加底色
         for (mid, l2), a in self._level_actions.items():
             a.setChecked(mid == m.id and l2 == lv)
-        eff = m.effort(lv) if lv else None
+        eff = m.effort(lv) if lv is not None else None
         self.model_chip.setText(m.name + (f" · {eff.label}" if eff else ""))
         self.selectionChanged.emit(self.model_id, self.reasoning)
 

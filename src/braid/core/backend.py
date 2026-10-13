@@ -118,6 +118,14 @@ class ConnectionResult:
 
 
 class AgentBackend(ABC):
+    """界面只通过这个接口和 Agent 核心打交道。
+
+    推理强度（effort）约定：类型是 ``str | None``。
+    - 字符串：``ModelInfo.efforts`` 里某一档的 ``id``，如 ``"medium"``；
+    - ``None``：不指定，由后端按该模型的默认行为处理（模型不支持推理强度时界面总是传 None）。
+    不再使用空串表示“没有档位”。
+    """
+
     _bus: ConfigBus | None = None
 
     @property
@@ -165,9 +173,12 @@ class AgentBackend(ABC):
         session_id: str,
         text: str,
         model: str,
-        reasoning: str = "medium",
+        reasoning: str | None = None,
         attachments: list[str] | None = None,
-    ) -> Iterator[StreamChunk]: ...
+    ) -> Iterator[StreamChunk]:
+        """发送一条消息并流式返回。``reasoning`` 是推理强度档位 id；None 表示用模型默认。"""
+        ...
+
     @abstractmethod
     def respond_permission(
         self, request_id: str, decision: Literal["once", "always", "deny"]

@@ -203,3 +203,5 @@ QMenu[role="modelMenu"]::item { padding: 6px 30px 24px 32px; min-width: 230px; f
 QMenu[role="modelMenu"]::item:checked { background: transparent; font-weight: normal; }
 QMenu[role="modelMenu"]::item:selected, QMenu[role="modelMenu"]::item:checked:selected { background: #343433; }
 QMenu[role="modelMenu"]::item:disabled { background: transparent; font-size: 12px; padding: 8px 12px 3px 12px; min-width: 0; }
+/* 模型菜单：去掉 Qt 原生子菜单箭头，由 ModelMenu 自绘 12px chevron（text3） */
+QMenu[role="modelMenu"]::right-arrow { image: none; width: 0px; height: 0px; }

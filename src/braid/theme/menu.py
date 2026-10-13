@@ -11,8 +11,18 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from PySide6.QtCore import Property, QEvent, QMargins, QRect, QSize, Qt
-from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPaintEvent, QPixmap
+from PySide6.QtCore import Property, QEvent, QMargins, QPointF, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QFont,
+    QFontMetricsF,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QMenu,
@@ -111,11 +121,42 @@ class ModelMenu(RoundedMenu):
         self.style().unpolish(self)
         self.style().polish(self)
 
-    ARROW_SLOT = 30  # 每行都给子菜单箭头留位，有无箭头的行标签右缘对齐
+    ARROW = 12  # 自绘 chevron 尺寸（不用字体字形、不用 Qt 原生箭头）
+    ARROW_RIGHT = 12  # 箭头右缘距行右缘
+    TAG_GAP = 6  # 标签文字右缘与箭头左缘的间距
 
-    def tag_right(self, action: QAction) -> int:
+    def arrow_rect(self, action: QAction) -> QRectF:
+        """子菜单箭头位置；没有子菜单的行也占这个位，保证所有行标签右缘对齐。"""
+        r = QRectF(self.actionGeometry(action))
+        x = r.right() - self.ARROW_RIGHT - self.ARROW
+        return QRectF(x, r.center().y() - self.ARROW / 2, self.ARROW, self.ARROW)
+
+    def tag_right(self, action: QAction) -> float:
         """右侧标签的右缘 x：所有行一致（不看这一行有没有子菜单箭头）。"""
-        return self.actionGeometry(action).right() - self.ARROW_SLOT
+        return self.arrow_rect(action).left() - self.TAG_GAP
+
+    def tag_rect(self, action: QAction) -> QRectF:
+        """标签文字的外接框：与行整体垂直居中（AlignVCenter）。"""
+        tag = str(action.property(TAG_PROP) or "")
+        f = QFont(self.font())
+        f.setPixelSize(self.TAG_PX)
+        fm = QFontMetricsF(f)
+        w = fm.horizontalAdvance(tag)
+        h = fm.height()
+        cy = QRectF(self.actionGeometry(action)).center().y()
+        return QRectF(self.tag_right(action) - w, cy - h / 2, w, h)
+
+    def _draw_chevron(self, p: QPainter, r: QRectF, color: QColor) -> None:
+        pen = QPen(color, 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        cx, cy = r.center().x(), r.center().y()
+        path = QPainterPath(QPointF(cx - 2, cy - 4))
+        path.lineTo(QPointF(cx + 2, cy))
+        path.lineTo(QPointF(cx - 2, cy + 4))
+        p.drawPath(path)
 
     @staticmethod
     def describe(action: QAction, desc: str, tag: str = "") -> None:
@@ -137,19 +178,21 @@ class ModelMenu(RoundedMenu):
         for a in self.actions():
             desc = a.property(DESC_PROP)
             tag = a.property(TAG_PROP)
-            if not desc and not tag:
+            if not desc and not tag and a.menu() is None:
                 continue
             r = self.actionGeometry(a)
-            right = self.tag_right(a)
+            right = int(self.tag_right(a))
+            if a.menu() is not None:
+                self._draw_chevron(p, self.arrow_rect(a), qcolor("text3", dark))
             if tag:
                 p.setFont(tf)
-                fm = p.fontMetrics()
-                tw = fm.horizontalAdvance(str(tag))
-                tr = QRect(right - tw, r.top() + 7, tw, fm.height() + 4)
-                # 纯文字小标签：无底色，text3
+                tr = self.tag_rect(a)
+                # 纯文字小标签：无底色，text3，与行整体垂直居中
                 p.setPen(qcolor("text3", dark))
-                p.drawText(tr, int(Qt.AlignmentFlag.AlignCenter), str(tag))
-                right = tr.left() - 8
+                p.drawText(
+                    tr, int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), str(tag)
+                )
+                right = int(tr.left()) - 8
             if desc:
                 p.setFont(f)
                 p.setPen(qcolor("text3", dark))

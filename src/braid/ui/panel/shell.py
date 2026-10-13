@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QResizeEvent
+from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -29,6 +29,9 @@ from braid.core.artifacts import ArtifactSource
 from braid.core.browser import BrowserController
 from braid.core.git import GitSource
 from braid.theme.palette import tokens as palette
+
+if TYPE_CHECKING:
+    from braid.ui.panel.artifacts import ArtifactsPage
 
 DEFAULT_WIDTH, MIN_WIDTH, MAX_WIDTH = 420, 320, 720
 TAB_ROW_H, TAB_H = 44, 28
@@ -217,7 +220,10 @@ class RightPanel(QFrame):
         artifact_source: ArtifactSource | None = None,
         git_source: GitSource | None = None,
         browser_controller: BrowserController | None = None,
+        lazy_pages: bool = False,
     ) -> None:
+        """``lazy_pages=True``（主窗口用）：连默认标签页也等面板首次显示时再构建，
+        面板收起启动时三个页面都不构建。默认 False 时构造即建好默认标签页。"""
         super().__init__(parent)
         if mode is None:  # 未指定时跟随应用主题（app 属性 braidDark）
             from braid.theme.menu import is_dark
@@ -272,26 +278,20 @@ class RightPanel(QFrame):
         self.stack = QStackedWidget()
         self.stack.setMinimumWidth(1)  # 页面内容的最小宽度不向上传播到面板
         root.addWidget(self.stack, 1)
-        # 浏览器页延迟创建：首次切到该标签才 import（将来 QtWebEngine 在那里导入）
-        self.stack.addWidget(QWidget())
-        self.browser_loaded = False
+        # 三个页面都延迟创建：先放轻量占位，标签首次“可见地”显示时才构建真实页面。
+        # 面板收起（不可见）时不构建任何页面；浏览器页在构建时才 import（QtWebEngine 在其内部）。
         self.browser_controller = browser_controller
+        self.git_source = git_source
+        self.artifact_source = artifact_source
         self.theme_mode = mode
-        if git_source is not None:
-            from braid.ui.panel.git import GitPage
-
-            self.git: QWidget = GitPage(git_source, theme=mode)
-        else:
-            self.git = placeholder_page("Git（未连接仓库）")
-        self.stack.addWidget(self.git)
-        from braid.ui.panel.artifacts import ArtifactsPage
-
-        self.artifacts = ArtifactsPage(artifact_source, theme=mode)
-        self.stack.addWidget(self.artifacts)
+        self._pages: dict[int, QWidget] = {}
+        for _ in TAB_NAMES:
+            self.stack.addWidget(QWidget())
         self.tab_group.idClicked.connect(self.set_current)
 
         self.grip = ResizeGrip(self)
         self._apply_shadow()
+        self._lazy = lazy_pages
         self.set_current(DEFAULT_TAB)
         self.set_panel_width(DEFAULT_WIDTH)
 
@@ -347,22 +347,81 @@ class RightPanel(QFrame):
     def current_index(self) -> int:
         return self.tab_group.checkedId()
 
-    def _ensure_browser(self) -> None:
-        if self.browser_loaded:
-            return
-        from braid.ui.panel.browser import BrowserPage  # 延迟导入
+    @property
+    def browser_loaded(self) -> bool:
+        return BROWSER_TAB in self._pages
 
-        self.browser_loaded = True
-        self.browser: QWidget = BrowserPage(self.browser_controller, theme=self.theme_mode)
-        self.set_page(BROWSER_TAB, self.browser)
+    def page_created(self, index: int) -> bool:
+        return index in self._pages
+
+    def _build_page(self, index: int) -> QWidget:
+        mode = self.theme_mode
+        if index == BROWSER_TAB:
+            from braid.ui.panel.browser import BrowserPage  # 延迟导入
+
+            return BrowserPage(self.browser_controller, theme=mode)
+        if index == GIT_TAB:
+            if self.git_source is None:
+                return placeholder_page("Git（未连接仓库）")
+            from braid.ui.panel.git import GitPage
+
+            return GitPage(self.git_source, theme=mode)
+        from braid.ui.panel.artifacts import ArtifactsPage
+
+        return ArtifactsPage(self.artifact_source, theme=mode)
+
+    def ensure_page(self, index: int) -> QWidget:
+        """取得（必要时构建）某个标签的真实页面；构建一次后复用。"""
+        page = self._pages.get(index)
+        if page is None:
+            page = self._pages[index] = self._build_page(index)
+            self.set_page(index, page)
+        return page
+
+    # 兼容旧属性：访问即构建
+    @property
+    def browser(self) -> QWidget:
+        return self.ensure_page(BROWSER_TAB)
+
+    @property
+    def git(self) -> QWidget:
+        return self.ensure_page(GIT_TAB)
+
+    @property
+    def artifacts(self) -> ArtifactsPage:
+        from braid.ui.panel.artifacts import ArtifactsPage
+
+        page = self.ensure_page(ARTIFACTS_TAB)
+        assert isinstance(page, ArtifactsPage)
+        return page
+
+    def _ensure_browser(self) -> None:
+        self.ensure_page(BROWSER_TAB)
+
+    def is_collapsed(self) -> bool:
+        """所在窗口已显示而面板不可见/宽度为 0。"""
+        win = self.window()
+        return win is not self and win.isVisible() and (not self.isVisible() or self.width() <= 0)
+
+    def _materialize_current(self) -> None:
+        i = self.current_index()
+        if i < 0 or self.is_collapsed():
+            return
+        if self._lazy and not self.isVisible():
+            return  # 尚未显示：等 showEvent
+        self.ensure_page(i)
+
+    def showEvent(self, e: QShowEvent) -> None:
+        super().showEvent(e)
+        if self.width() > 0:
+            self.ensure_page(self.current_index())
 
     def set_current(self, index: int) -> None:
-        if index == BROWSER_TAB:
-            self._ensure_browser()
         self.tabs[index].setChecked(True)
         if self.stack.currentIndex() != index:
             self.stack.setCurrentIndex(index)
             self.currentChanged.emit(index)
+        self._materialize_current()
 
     def _split_slot(self) -> tuple[QSplitter, int, int] | None:
         """所在 QSplitter、本面板下标、让出/吸收宽度的相邻栏（中栏）下标。"""

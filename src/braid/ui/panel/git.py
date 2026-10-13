@@ -15,6 +15,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QResizeEvent,
+    QShowEvent,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -502,11 +503,26 @@ class GitPage(QWidget):
         self.commit_btn.clicked.connect(self.commit)
         self.commit_input.submitted.connect(self.commit)
         self.commit_input.textChanged.connect(self._update_commit_btn)
-        source.changed.connect(self.refresh)
+        self._stale = False
+        source.changed.connect(self._on_changed)
         source.busyChanged.connect(self._on_busy)
         self.refresh()
 
     # —— 数据 ——
+    def _on_changed(self) -> None:
+        # 所在窗口已显示但本页不可见（在别的标签/面板收起）时不查询仓库，等显示时再刷新
+        win = self.window()
+        if win is not self and win.isVisible() and not self.isVisible():
+            self._stale = True
+            return
+        self.refresh()
+
+    def showEvent(self, e: QShowEvent) -> None:
+        super().showEvent(e)
+        if self._stale:
+            self._stale = False
+            self.refresh()
+
     def refresh(self) -> None:
         st = self.source.status()
         self.status = st

@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
             artifact_source=self.artifact_source,
             git_source=MockGitSource(),
             browser_controller=MockBrowserController(),
+            lazy_pages=True,
         )
         self.panel_tabs = panel.tab_row
         # 最后一个标签与浮层按钮至少 16px

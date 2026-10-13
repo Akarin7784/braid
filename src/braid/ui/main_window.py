@@ -36,6 +36,7 @@ from braid.core.settings import settings
 from braid.ui.chat_controller import ChatController
 from braid.ui.chat_view import ChatView
 from braid.ui.composer import Composer
+from braid.ui.gl_prewarm import prewarm_gl_surface
 from braid.ui.icon_button import IconButton
 from braid.ui.panel import RightPanel
 from braid.ui.panel.shell import MIN_WIDTH as PANEL_MIN
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
         self.chat.editRequested.connect(composer.set_text)
         cl.addWidget(composer)
 
+        self._gl_prewarm = prewarm_gl_surface(self)
         self.artifact_source = MockArtifactSource()
         self.panel = panel = RightPanel(
             artifact_source=self.artifact_source,
@@ -238,6 +240,7 @@ class MainWindow(QMainWindow):
             return  # 只改了别的字段，或主题没变
         dark = apply_theme(mode)
         self.chat_view.set_dark(dark)
+        self.panel.set_theme("dark" if dark else "light")
         for w in self.findChildren(QWidget):
             w.update()
 

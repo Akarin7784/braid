@@ -438,6 +438,17 @@ class BrowserPage(QWidget):
         b.installEventFilter(self)
         return b
 
+    def set_theme(self, mode: str) -> None:
+        """切换深浅色：重设 QSS、导航图标与进度条（其余部件在 paint 时取色）。"""
+        self.dark = mode == "dark"
+        self.setStyleSheet(browser_qss(mode))
+        for b in self.findChildren(QPushButton):
+            name = b.property("navIcon")
+            if name:
+                self._set_nav_icon(b, str(name))
+        self.set_progress(getattr(self, "_progress_pct", 0))
+        self.update()
+
     def _set_nav_icon(self, b: QPushButton, name: str) -> None:
         b.setProperty("navIcon", name)
         icon = load_nav_icon(name, self.dark)
@@ -517,6 +528,7 @@ class BrowserPage(QWidget):
         self._update_nav()
 
     def set_progress(self, pct: int) -> None:
+        self._progress_pct = pct
         t = palette(is_dark())
         stop = max(0.0, min(1.0, pct / 100))
         s2 = min(1.0, stop + 0.001)

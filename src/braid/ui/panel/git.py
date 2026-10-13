@@ -37,6 +37,7 @@ from braid.ui.panel.shell import card_shadow
 ROW_H = 28  # 文件行高
 DIFF_FONT_PX, DIFF_LINE_H, LINENO_W = 12, 20, 26
 COMMIT_MAX_LINES = 6
+COMMIT_PAD_V = 10  # 提交输入框上下内边距
 STATUS_TOKEN = {"A": "success", "M": "warning", "D": "danger"}
 SPIN_SIZE, SPIN_WIDTH, SPIN_TICK_MS, SPIN_PERIOD_MS = 12, 1.5, 16, 800
 ARROW_PX = 12
@@ -75,7 +76,8 @@ QFrame[role="fileRow"] QLabel[role="path"] {{ color: {t["text2"]}; }}
 QFrame[role="fileRow"][selected="true"] QLabel[role="path"] {{ color: {t["text"]}; }}
 QPushButton[role="stageToggle"] {{ border: none; background: transparent; color: {t["text2"]};
     font-weight: 600; }}
-#CommitInput {{ background: transparent; border: none; color: {t["text"]}; font-size: 13px; }}
+#CommitInput {{ background: transparent; border: none; color: {t["text"]}; font-size: 13px;
+    padding: {COMMIT_PAD_V}px 0; }}
 #CommitButton {{ background: {t["accent"]}; color: {t["accent_text"]}; border: none;
     border-radius: 10px; padding: 4px 12px; font-weight: 600; }}
 #CommitButton:hover {{ background: {t["accent_hover"]}; }}
@@ -194,7 +196,7 @@ class SyncButton(QPushButton):
         dark = is_dark()
         if not self.isEnabled():
             return qcolor("text3", dark)
-        return qcolor("brand" if self.property("emphasis") else "text", dark)
+        return qcolor("brand" if self.property("emphasis") else "text2", dark)
 
     def refresh_icon(self) -> None:
         if self.busy:
@@ -385,8 +387,12 @@ class CommitInput(QPlainTextEdit):
         super().__init__()
         self.setObjectName("CommitInput")
         self.setPlaceholderText("提交信息（Ctrl+Enter 提交）")
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # 未超过最大行数时不显示滚动条（否则 Windows 上会在按钮左边留一根竖条）
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        doc = self.document()
+        if doc is not None:
+            doc.setDocumentMargin(0)
         self.textChanged.connect(self._fit)
         self._fit()
 
@@ -395,9 +401,22 @@ class CommitInput(QPlainTextEdit):
 
     def _fit(self) -> None:
         doc = self.document()
-        n = max(1, min(COMMIT_MAX_LINES, doc.lineCount() if doc else 1))
+        lines = doc.lineCount() if doc else 1
+        n = max(1, min(COMMIT_MAX_LINES, lines))
+        self.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            if lines > COMMIT_MAX_LINES
+            else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        # 按实际字体行高算（Windows 雅黑行距比 Noto 大），不写死像素；
+        # contentsMargins 已含 QSS padding 与边框
         m = self.contentsMargins()
-        self.setFixedHeight(n * self._line_h() + 8 + m.top() + m.bottom())
+        self.setFixedHeight(n * self._line_h() + m.top() + m.bottom())
+
+    def changeEvent(self, e: QEvent) -> None:
+        super().changeEvent(e)
+        if e.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._fit()
 
     def keyPressEvent(self, e: QKeyEvent) -> None:
         if e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and (
@@ -409,6 +428,15 @@ class CommitInput(QPlainTextEdit):
 
 
 class GitPage(QWidget):
+    def set_theme(self, mode: str) -> None:
+        """切换深浅色：QSS 重设；文件行与 diff 在 paint 时按 is_dark() 取色。"""
+        self.theme = mode
+        self.setStyleSheet(git_qss(mode))
+        self.pull_btn.refresh_icon()
+        self.push_btn.refresh_icon()
+        for w in self.findChildren(QWidget):
+            w.update()
+
     def __init__(
         self, source: GitSource, parent: QWidget | None = None, theme: str = "light"
     ) -> None:
@@ -496,7 +524,7 @@ class GitPage(QWidget):
         cl.addWidget(self.commit_input, 1)
         self.commit_btn = QPushButton()
         self.commit_btn.setObjectName("CommitButton")
-        cl.addWidget(self.commit_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        cl.addWidget(self.commit_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         card_shadow(commit_card)
         lay.addWidget(commit_card)
 

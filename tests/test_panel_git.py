@@ -167,7 +167,7 @@ def test_pull_push_arrow_icons(qtbot):
     for b in (p.pull_btn, p.push_btn):
         assert not b.icon().isNull() and b.iconSize().width() == 12
     assert p.pull_btn.text() == "Pull" and p.push_btn.text() == "Push"
-    assert p.pull_btn.text_color().name().upper() == tokens("light")["text"]
+    assert p.pull_btn.text_color().name().upper() == tokens("light")["text2"]
     assert p.push_btn.text_color().name().upper() == tokens("light")["brand"]
 
 

@@ -1,6 +1,6 @@
 """在真实平台插件（Linux CI 上用 xvfb）下截固定的设计走查图。
 
-输出：{main_panel_open,main_panel_closed,chip,menu}_{light,dark}.png
+输出：{main_panel_open,main_panel_closed,chip,menu,sidebar,settings}_{light,dark}.png
 """
 
 from __future__ import annotations
@@ -52,18 +52,14 @@ def run(app: QApplication, theme: str) -> None:
     w.move(0, 0)
     w.show()
     settle(app)
-    panel = w.findChild(QWidget, "SidePanel")
-
-    if panel is not None:
-        panel.show()
-        settle(app)
+    w.set_panel_open(True, animate=False)
+    settle(app)
     grab_screen(app, w, f"main_panel_open_{theme}.png")
-    if panel is not None:
-        panel.hide()
-        settle(app)
-        grab_screen(app, w, f"main_panel_closed_{theme}.png")
-        panel.show()
-        settle(app)
+    w.set_panel_open(False, animate=False)
+    settle(app)
+    grab_screen(app, w, f"main_panel_closed_{theme}.png")
+    w.set_panel_open(True, animate=False)
+    settle(app)
 
     chip = model_chip(w)
     pad = 24
@@ -87,6 +83,15 @@ def run(app: QApplication, theme: str) -> None:
             p.drawPixmap(pos + menu.actionGeometry(acts[0]).topRight(), sub.grab())
         p.end()
         img.save(str(OUT / f"menu_{theme}.png"))
+
+    # 侧栏整列：项目分组、选中态和左下角齿轮
+    w.sidebar.grab().save(str(OUT / f"sidebar_{theme}.png"))
+
+    # 设置页
+    w.show_settings(True)
+    settle(app)
+    grab_screen(app, w, f"settings_{theme}.png")
+    w.show_settings(False)
     w.close()
 
 

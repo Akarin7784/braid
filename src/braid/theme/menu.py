@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Property, QMargins, Qt
-from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent
-from PySide6.QtWidgets import QApplication, QMenu, QWidget
+from importlib.resources import files
+
+from PySide6.QtCore import Property, QMargins, QRect, Qt
+from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QPixmap
+from PySide6.QtWidgets import QApplication, QMenu, QToolButton, QWidget
 
 from braid.theme.nine_slice import NineSliceShadow
 
@@ -77,3 +79,29 @@ class RoundedMenu(QMenu):
         p.drawRoundedRect(card, RADIUS, RADIUS)
         p.end()
         super().paintEvent(e)
+
+
+class ChipButton(QToolButton):
+    """模型 chip：QSS 的 ::menu-indicator 对 InstantPopup 不生效，下拉箭头在这里自绘。"""
+
+    ARROW = 10
+    ARROW_RIGHT = 12
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setProperty("role", "modelChip")
+        self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        super().paintEvent(event)
+        name = "dark" if is_dark() else "light"
+        pm = QPixmap(str(files("braid.assets") / "icons" / f"chevron_down_{name}.png"))
+        if pm.isNull():
+            return
+        s = self.ARROW
+        r = QRect(self.width() - self.ARROW_RIGHT - s, (self.height() - s) // 2, s, s)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.drawPixmap(r, pm)
+        p.end()
